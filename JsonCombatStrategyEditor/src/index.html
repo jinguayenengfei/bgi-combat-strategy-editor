@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>面向角色的JSON战斗策略编辑器</title>
+<style>
+:root{
+  --bg:#14161a; --bg2:#1b1e24; --bg3:#22262e; --line:#2f343d; --line2:#3c4350;
+  --fg:#e6e9ef; --fg2:#a8b0be; --fg3:#6f7889;
+  --acc:#5aa9ff; --acc2:#1d6fd6; --ok:#4ec97f; --warn:#e8b339; --err:#ff6b6b; --purple:#b98cff;
+  --e0:#9aa0a6; --e1:#8fe3ff; --e2:#ff7a52; --e3:#4cc2ff; --e4:#b98cff; --e5:#6fe0b8; --e6:#ffd166; --e7:#9ade4b;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--bg);color:var(--fg);font:13px/1.6 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;}
+button,input,select,textarea{font-family:inherit;font-size:13px;color:var(--fg)}
+input,select,textarea{background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:4px 6px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+input[type=checkbox]{accent-color:var(--acc);width:14px;height:14px;vertical-align:-2px}
+button{background:var(--bg3);border:1px solid var(--line2);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:hover{background:#2b303a;border-color:var(--line2)}
+button.primary{background:var(--acc2);border-color:var(--acc2);color:#fff}
+button.primary:hover{background:#2b7fe6}
+button.danger{border-color:#5c2b2b;color:#ff9a9a}
+button.danger:hover{background:#3a2222}
+button.mini{padding:1px 7px;font-size:12px;border-radius:5px}
+button:disabled{opacity:.45;cursor:not-allowed}
+a{color:var(--acc)}
+.app{display:flex;flex-direction:column;height:100%}
+header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--bg2);border-bottom:1px solid var(--line);flex:none}
+header h1{font-size:15px;margin:0;font-weight:600;white-space:nowrap}
+header .sub{color:var(--fg3);font-size:12px}
+nav{display:flex;gap:6px;margin-left:8px}
+nav button{padding:5px 14px}
+nav button.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+header .spacer{flex:1}
+.badge{display:inline-block;padding:0 6px;border-radius:9px;font-size:11px;line-height:17px;margin-left:5px;vertical-align:1px}
+.badge.err{background:#4a2020;color:#ffb3b3;border:1px solid #6b2d2d}
+.badge.warn{background:#463a17;color:#ffe0a3;border:1px solid #6b5a26}
+.badge.ok{background:#1e3d2a;color:#a8e6c1;border:1px solid #2c5c3e}
+.main{flex:1;display:flex;min-height:0}
+.pane{flex:1;overflow:auto;padding:14px 16px}
+.pane.hidden{display:none}
+.side{width:330px;flex:none;border-left:1px solid var(--line);background:var(--bg2);overflow:auto;padding:10px 12px}
+.side.hidden{display:none}
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:12px}
+.card>h3{margin:0 0 8px;font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card>h3 .hint{font-weight:400;color:var(--fg3);font-size:12px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.row.mb{margin-bottom:8px}
+label.f{display:flex;align-items:center;gap:6px;color:var(--fg2);white-space:nowrap}
+.grid2{display:grid;grid-template-columns:max-content 1fr;gap:8px 10px;align-items:center}
+.hint{color:var(--fg3);font-size:12px}
+.warnbox{background:#2b2312;border:1px solid #6b5a26;border-radius:6px;padding:6px 9px;color:#ffe0a3;font-size:12px}
+.errbox{background:#2c1a1a;border:1px solid #6b2d2d;border-radius:6px;padding:6px 9px;color:#ffb3b3;font-size:12px}
+.okbox{background:#1a2b21;border:1px solid #2c5c3e;border-radius:6px;padding:6px 9px;color:#a8e6c1;font-size:12px}
+.mono{font-family:Consolas,"Courier New",monospace}
+.kw{color:var(--acc)}
+.dim{color:var(--fg3)}
+hr{border:0;border-top:1px solid var(--line);margin:10px 0}
+textarea{width:100%;resize:vertical;line-height:1.55}
+select{padding:3px 4px}
+.tag{display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--line2);border-radius:12px;padding:1px 5px 1px 7px;font-size:12px;margin:2px 4px 2px 0}
+.tag button{border:0;background:none;padding:0 2px;color:var(--fg3);cursor:pointer;font-size:13px}
+.tag button:hover{color:var(--err)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--line2);border-radius:6px;padding:2px 8px;font-size:12px;cursor:pointer}
+.chip:hover{border-color:var(--acc)}
+.chip.on{background:#20364f;border-color:var(--acc2)}
+table{border-collapse:collapse;width:100%}
+th,td{border-bottom:1px solid var(--line);padding:4px 8px;text-align:left;vertical-align:top}
+th{color:var(--fg2);font-weight:600;background:var(--bg3);position:sticky;top:0;z-index:1}
+tr:hover td{background:#1d2128}
+.pri{font-family:Consolas,monospace;font-weight:700}
+.pri.hi{color:#ff9a9a}
+.pri.mid{color:#e8b339}
+.pri.low{color:#8fd0ff}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50}
+.modal.hidden{display:none}
+.modal .box{background:var(--bg2);border:1px solid var(--line2);border-radius:10px;max-width:900px;width:92%;max-height:86vh;display:flex;flex-direction:column}
+.modal .box>h3{margin:0;padding:12px 16px;border-bottom:1px solid var(--line);font-size:14px}
+.modal .body{padding:14px 16px;overflow:auto}
+.modal .foot{padding:10px 16px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex:none}
+.rolelist{max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.roleitem{display:flex;align-items:center;gap:7px;padding:2px 8px;cursor:pointer;font-size:12.5px}
+.roleitem:hover{background:#232833}
+.roleitem .nm{flex:1}
+.roleitem .cnt{color:var(--fg3);font-size:11.5px}
+.secgroup{padding:3px 8px;background:var(--bg3);color:var(--fg2);font-size:11.5px;position:sticky;top:0}
+.actioncard{background:var(--bg2);border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:8px;margin-bottom:10px}
+.actioncard.err{border-left-color:var(--err)}
+.actioncard.warn{border-left-color:var(--warn)}
+.actioncard .hd{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;flex-wrap:wrap}
+.actioncard .hd .nm{font-weight:600}
+.actioncard .bd{padding:0 10px 10px;border-top:1px solid var(--line)}
+details.det{margin:8px 0;padding:2px 0}
+details.det>summary{font-weight:600;color:var(--fg);padding:4px 0;border-bottom:1px solid var(--line);margin-bottom:6px}
+details.det>summary .hint{font-weight:400}
+details.det.sub{margin:6px 0;padding:0}
+details.det.sub>summary{font-weight:400;color:var(--fg2);border-bottom:0;margin-bottom:2px}
+details.det.sub>summary:hover{color:var(--fg)}
+/* 折叠区块标题旁的「语句预览」（动作指令 / 触发条件 / 队友条件）：最多显示 2 行，再长的内容截断，
+   避免超长指令串把卡片标题撑得很高（完整内容展开后可见） */
+details.det>summary .prev{display:inline-block;vertical-align:top;max-height:3.2em;overflow:hidden;white-space:normal;max-width:100%}
+.condrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;background:var(--bg3);border:1px solid var(--line);border-radius:6px;padding:5px 7px;margin-bottom:5px}
+.condrow .num{color:var(--fg3);width:16px;text-align:center;flex:none}
+.kv{display:grid;grid-template-columns:88px 1fr;gap:4px 8px;font-size:12.5px}
+.kv .k{color:var(--fg2)}
+.kv .v{color:var(--fg);word-break:break-all}
+.tree{font-family:Consolas,monospace;font-size:12px;white-space:pre;color:var(--fg2);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;overflow:auto;max-height:210px}
+details summary{cursor:pointer;color:var(--fg2)}
+details summary:hover{color:var(--fg)}
+.kbgrid{display:flex;flex-direction:column;gap:4px}
+.kbrow{display:flex;gap:4px;flex-wrap:wrap}
+.kb{min-width:30px;padding:3px 6px;font-size:12px;text-align:center}
+.kb.on{background:var(--acc2);border-color:var(--acc2);color:#fff}
+.scroll{max-height:320px;overflow:auto}
+.split{display:flex;gap:14px;align-items:flex-start}
+.split>.col{flex:1;min-width:0}
+.pill{display:inline-block;background:var(--bg3);border:1px solid var(--line2);border-radius:4px;padding:0 5px;font-size:11.5px;color:var(--fg2);font-family:Consolas,monospace}
+.aref{border-bottom:1px dashed var(--line2);cursor:help;color:var(--acc)}
+.stars{color:var(--e6);font-size:11px;letter-spacing:-1px}
+.empty{color:var(--fg3);text-align:center;padding:26px 0}
+.footerbar{flex:none;padding:6px 14px;background:var(--bg2);border-top:1px solid var(--line);display:flex;gap:12px;align-items:center;font-size:12px;color:var(--fg2)}
+.footerbar .spacer{flex:1}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>面向角色的JSON战斗策略编辑器</h1>
+    <span class="sub" id="hdrStatus">未命名策略</span>
+    <nav id="tabs"></nav>
+    <span class="spacer"></span>
+    <span id="hdrIssues"></span>
+    <button id="btnIssues" class="mini">校验面板</button>
+  </header>
+  <div class="main">
+    <div class="pane" id="paneInfo"></div>
+    <div class="pane hidden" id="paneActions"></div>
+    <div class="pane hidden" id="panePreview"></div>
+    <div class="side" id="side"></div>
+  </div>
+  <div class="footerbar">
+    <span id="footInfo"></span>
+    <span class="spacer"></span>
+    <span>草稿自动保存在浏览器本地（localStorage，按「策略名称 + 版本」归档）</span>
+  </div>
+</div>
+<div class="modal hidden" id="modal"><div class="box">
+  <h3 id="modalTitle"></h3>
+  <div class="body" id="modalBody"></div>
+  <div class="foot" id="modalFoot"></div>
+</div></div>
+<script>
+<!--__BUNDLE__-->
+</script>
+</body>
+</html>
