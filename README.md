@@ -1,1 +1,2 @@
-# BGIStrategyEditorForCharacters
+# 面向角色的战斗策略编辑器
+一个用于编辑“更好的原神”（BetterGI）中的JSON战斗策略的编辑器（先写个占位README，其他内容以后再补充）
