@@ -76,9 +76,13 @@ function commandTokenTable(parts) {
 
 /* -------- 指令串校验反馈（手输指令时实时刷新，不重建面板） -------- */
 
-/** 指令串 → 校验反馈 HTML（错误 + 警告） */
-function commandFeedbackHtml(value) {
-  const p = parseActionString(value || '');
+/**
+ * 指令串 → 校验反馈 HTML（错误 + 警告）。
+ * skipEmptyWarning 由调用方按「当前角色 + 动作类型 0 只写触发条件、不写指令」的规则决定
+ * （见 core.js 的 isMarkerOnlyAction），这时不提示「指令串为空」。
+ */
+function commandFeedbackHtml(value, skipEmptyWarning) {
+  const p = parseActionString(value || '', { skipEmptyWarning: !!skipEmptyWarning });
   const m = 'margin-bottom:6px';
   return (p.errors.length ? `<div class="errbox" style="${m}">${p.errors.map(esc).join('<br>')}</div>` : '')
     + (p.warnings.length ? `<div class="warnbox" style="${m}">${p.warnings.map(esc).join('<br>')}</div>` : '');
@@ -109,7 +113,10 @@ function updateCommandFeedback(ref, value, mode) {
       const pa = state.strategy.info.preActions[i] || {};
       check.innerHTML = preCmdFeedbackHtml({ character: pa.character || '', cmd: value });
     } else {
-      check.innerHTML = commandFeedbackHtml(value);
+      // 角色动作：按「当前角色 + 动作类型 0 只写条件不写指令」的规则决定要不要提示指令串为空
+      const a = state.strategy.actions.find(x => x.id === String(ref).replace(/^act:/, ''));
+      const marker = !!a && isMarkerOnlyAction({ ...a, action: value });
+      check.innerHTML = commandFeedbackHtml(value, marker);
     }
   }
   const tokens = document.querySelector(`[data-cmdtokens="${key}"]`);
@@ -330,13 +337,16 @@ function commandEditorHtml(value, kind, actionId, opts) {
   const o = Object.assign({ rows: 3, label: '动作指令（action）', hint: '', qid: '' }, opts || {});
   const p = parseActionString(value || '');
   const id = o.qid || `${kind}:${actionId}`;
+  // 角色动作按「当前角色 + 动作类型 0 只写条件不写指令」的规则决定要不要提示指令串为空
+  const act = kind === 'act' ? state.strategy.actions.find(x => x.id === actionId) : null;
+  const marker = !!act && isMarkerOnlyAction({ ...act, action: value });
   return `
     <div class="hint" style="margin-bottom:4px">${esc(o.label)}</div>
     ${ctrl({ tag: 'textarea', kind, actionId, field: 'action', value: value || '', rows: o.rows, placeholder: '用半角逗号分隔，例如：q,wait(0.1),ready', extra: ` data-ref="${attr(id)}"` })}
     <div class="row" style="margin:6px 0">
       <span class="hint">${esc(o.hint || '必须以半角逗号分隔；不支持 | 与 round()；中文括号/逗号会报错')}</span>
     </div>
-    <div data-cmdcheck="${attr(id)}">${commandFeedbackHtml(value)}</div>
+    <div data-cmdcheck="${attr(id)}">${commandFeedbackHtml(value, marker)}</div>
     <details class="det sub" data-details="${attr(id)}:quick" ${detailOpen(`${id}:quick`, true) ? 'open' : ''}><summary>快捷插入指令</summary>
       ${renderQuickCommandPanel(id, { kind, actionId, index: actionId }, value)}
     </details>
@@ -414,6 +424,22 @@ function restoreCommandCaret(target, caret) {
 
 /* ---------------- 信息页渲染 ---------------- */
 
+/**
+ * 「战斗前动作列表」每一行角色搜索框里的内容。
+ * 只用于该行角色候选列表的过滤（选择框里始终保留全部角色），
+ * 所以放在 app 上而不是 state.ui 里：不会被 saveUi 落盘，重建面板后也能保留。
+ */
+function preSearches() {
+  if (!Array.isArray(app.preSearch)) app.preSearch = [];
+  return app.preSearch;
+}
+function setPreSearch(i, v) {
+  const list = preSearches();
+  const n = Number(i);
+  if (!Number.isInteger(n) || n < 0) return;
+  list[n] = String(v === undefined || v === null ? '' : v);
+}
+
 function renderInfoPanel() {
   const s = state.strategy;
   const pre = s.info.preActions || [];
@@ -421,9 +447,9 @@ function renderInfoPanel() {
   const infoErrors = v.errors.filter(x => !x.actionId);
   const infoWarns = v.warnings.filter(x => !x.actionId);
   const drafted = loadDrafts();
-  const pQuery = (state.ui.preAvatarSearch || '').trim().toLowerCase();
-  const preAvatars = AVATARS.filter(a => !a.virtual
-    && (!pQuery || a.name.toLowerCase().includes(pQuery) || String(a.id || '').includes(pQuery)));
+  // 每一行「战斗前动作」自己的角色搜索词：值跟着 DOM 走（不放进 state.ui，避免被 saveUi 落盘）
+  const searches = preSearches();
+  const prePool = AVATARS.filter(a => !a.virtual);
 
   $('paneInfo').innerHTML = `
     <div class="split">
@@ -457,19 +483,17 @@ function renderInfoPanel() {
         <div class="card">
           <h3>战斗前动作列表 <span class="hint">info.preActions：开战前按顺序执行一次</span></h3>
           <div class="hint mb">格式为 <span class="pill">角色名 指令串</span> 或只有 <span class="pill">指令串</span>（不写角色名时使用队伍第 1 名角色）。注意：BetterGI 按<b>第一个空格</b>切分角色名，所以指令串里不能有空格（要写 <span class="pill">walk(s,0.2)</span> 而不是 <span class="pill">walk(s, 0.2)</span>）。</div>
-          <div class="row mb">
-            <input data-kind="info" data-field="preAvatarSearch" data-focus="pre:search" value="${attr(state.ui.preAvatarSearch || '')}" placeholder="搜索角色名 / 编号" style="width:200px">
-            <span class="hint">筛选下面每个动作的角色下拉；留空显示全部 ${AVATARS.filter(a => !a.virtual).length} 个角色</span>
-          </div>
+          <div class="hint mb">每一个动作的角色下拉旁边都有自己的搜索框：在里面输入角色名 / 编号，旁边的<b>角色选择框</b>里就只剩匹配到的角色，从选择框里挑一个即可。</div>
           ${pre.length ? pre.map((pa, i) => {
             const qid = `pre:${i}`;
+            const q = searches[i] || '';
             return `<div class="card" style="background:var(--bg3);margin-bottom:8px;padding:8px 10px">
               <div class="row mb">
                 <span class="hint">#${i + 1}</span>
-                <select data-kind="pre" data-idx="${i}" data-field="character" style="width:150px">
-                  <option value="" ${pa.character ? '' : 'selected'}>（不指定角色）</option>
-                  ${preAvatars.map(a => `<option value="${attr(a.name)}" ${pa.character === a.name ? 'selected' : ''}>${esc(a.name)}（${avatarCodeLabel(a)}）</option>`).join('')}
+                <select data-kind="pre" data-idx="${i}" data-field="character" style="width:150px" title="角色选择框：选项由旁边的搜索框筛选">
+                  ${avatarFilterOptions(q, pa.character || '', { pool: prePool, allLabel: '（不指定角色）' })}
                 </select>
+                <input data-kind="pre" data-field="avatarSearch" data-idx="${i}" value="${attr(q)}" placeholder="搜索角色名 / 编号" style="width:150px" title="搜索词只用来筛选旁边的角色选择框">
                 <button class="mini" data-act="pre-up" data-idx="${i}">↑</button>
                 <button class="mini" data-act="pre-down" data-idx="${i}">↓</button>
                 <button class="mini danger" data-act="pre-del" data-idx="${i}">删除</button>
@@ -502,8 +526,8 @@ function renderInfoPanel() {
           <div class="hint mb">导出前会再做一次完整校验，有错误会拒绝导出并列出原因。</div>
           <hr>
           <div class="row mb">
-            <button class="mini" data-act="new-blank">新建空白策略</button>
-            <button class="mini" data-act="new-preset">新建（含兜底等待）</button>
+            <button class="mini" data-act="new-preset">新建（含兜底动作）</button>
+            <button class="mini" data-act="new-blank">新建空白策略（不建议）</button>
             <button class="mini" data-act="drafts">本地草稿…</button>
           </div>
           <div class="hint">草稿按「策略名称 + 版本」两个条件自动保存到浏览器本地（二者有其一不同就是不同的草稿），共 ${Object.keys(drafted).length} 份</div>
@@ -518,6 +542,18 @@ function renderInfoPanel() {
             <div class="k">涉及角色</div><div class="v">${new Set(s.actions.map(a => a.character || '当前角色')).size}</div>
             <div class="k">优先级条目</div><div class="v">${expandPriorities(s.actions, null).length}（含其他触发条件展开）</div>
             <div class="k">全局错误/警告</div><div class="v">${v.errors.length} / ${v.warnings.length}</div>
+            <div class="k">命座要求</div><div class="v">${(() => {
+              const n = s.actions.filter(a => consHasRequirement(a)).length;
+              const chs = consCharacters(s.actions);
+              return n ? `${n} 条动作设置了命座要求（${chs.length} 个角色）` : '没有动作设置命座要求';
+            })()}</div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="mini" data-act="cons-switch">快捷开关高命座手法</button>
+            <span class="hint">${(() => {
+              const chs = consCharacters(s.actions);
+              return chs.length ? `可切换的角色：${chs.map(c => esc(c || '当前角色')).join('、')}` : '还没有动作设置「达到命座开启 / 达到命座关闭」，在动作卡片的「触发条件」→「命座要求」里设置';
+            })()}</span>
           </div>
         </div>
 
@@ -528,18 +564,92 @@ function renderInfoPanel() {
             <span class="pill">[动作类型][元素类型][角色编号×2][同类型第 N 条]</span><br>
             元素类型号按元素反应的先后手顺序分配：<b>1</b> 冰 · <b>2</b> 火 · <b>3</b> 水 · <b>4</b> 雷 · <b>5</b> 风 · <b>6</b> 岩 · <b>7</b> 草（<b>0</b> 元素未定/当前角色；同元素内按 BetterGI 内置角色表次序 01、02…）。<br>
             例如 <b>33011</b> = 后台输出 · 水元素 · 芭芭拉(01) · 第 1 条；<b>14041</b> = 开盾 · 雷元素 · 菲谢尔(04) · 第 1 条。<br>
-            动作类型 0（战斗检查与标记）只用于「当前角色」，编号退化成 1 位：<b>1</b>~<b>9</b>。<br>
+            动作类型 0（战斗检查与标记）只用于「当前角色」，编号退化成 1 位：<b>1</b>~<b>9</b>（这 9 个槽位都满时编辑器会临时多给一个尾数 <b>10</b>，校验面板会提示需要「按规则重排编号」）。<br>
             尾数 0 不用于动作，只出现在其他触发条件的 priority 里作为插入位。
           </div>
           <hr>
           <div class="hint" style="line-height:1.75">
             动作类型含义（数值越大越靠后）：<br>
             ${ACTION_TYPES.map(t => `<div style="margin:2px 0"><span class="pill">${t.code}</span> ${esc(t.name)}：${esc(t.cn || '')}</div>`).join('')}
+            <div style="margin-top:6px">为以上动作类型分配的数字，是根据“高血量，所需前置动作未执行，动作可能从未释放过”的基础条件假定下的动作优先程度决定的。</div>
           </div>
         </div>
       </div>
     </div>`;
   bindQuickCommandPanels();
+}
+
+/* ---------------- 快捷开关高命座手法 ----------------
+ * 列表里展示「有动作设置了达到命座开启 / 达到命座关闭」的每一个角色，
+ * 以及该角色可切换动作开关的相关命座；同一个角色有多个可切换命座时就分成几条 chip 放在一起。
+ * 点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座 ≤ x 的动作启用、> x 的停用
+ * （也就是「有高命必有低命，没有低命必没有高命」），点「不启用高命手法」则把该角色全部停用。
+ */
+
+/** 某角色当前生效的命座（= 已勾选目标命座里最大的那个；0 表示没有启用任何高命手法） */
+function consLevelOf(actions, character) {
+  let k = 0;
+  for (const a of (actions || [])) {
+    if (String(a.character || '') !== String(character || '')) continue;
+    if (!consHasRequirement(a)) continue;
+    if (consActiveState(a)) k = Math.max(k, Number(a.consTarget));
+  }
+  return k;
+}
+
+function openConsSwitchModal() {
+  const actions = state.strategy.actions;
+  const chars = consCharacters(actions);
+  if (!chars.length) {
+    openModal({
+      title: '快捷开关高命座手法',
+      body: `<div class="warnbox">目前没有任何动作设置了「达到命座开启 / 达到命座关闭」。</div>
+        <div class="hint" style="margin-top:6px">请在「动作编辑」页的动作卡片里展开「触发条件」区块，在其中的「命座要求」里选择模式与目标命座数、并按需要勾选「按达到x命设置动作启用/停用」。</div>`,
+      actions: [{ label: '知道了', primary: true, value: null }],
+    });
+    return;
+  }
+
+  const render = () => {
+    const rows = chars.map((ch, i) => {
+      const targets = consTargetsFor(state.strategy.actions, ch);
+      const level = consLevelOf(state.strategy.actions, ch);
+      const cnt = state.strategy.actions.filter(a => String(a.character || '') === String(ch) && consHasRequirement(a)).length;
+      return `<div class="card" style="background:var(--bg3);margin-bottom:8px;padding:8px 10px">
+        <div class="row mb">
+          <span style="min-width:130px">${avatarLabel(ch)}</span>
+          <span class="hint">${cnt} 条动作有命座要求，可切换命座：${targets.map(x => `<span class="pill">${x}</span>`).join(' ')}</span>
+          <span style="flex:1"></span>
+          <span class="badge ${level ? 'ok' : 'warn'}">当前按 ${level ? level + ' 命' : '不启用高命手法'}</span>
+        </div>
+        <div class="row">
+          <button class="chip ${level === 0 ? 'on' : ''}" data-cons-set="${i}" data-cons-level="0">不启用高命手法</button>
+          ${[1, 2, 3, 4, 5, 6].map(x => `<button class="chip ${level === x ? 'on' : ''}" data-cons-set="${i}" data-cons-level="${x}">${x} 命</button>`).join('')}
+        </div>
+        <div class="hint" style="margin-top:4px">点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座不高于 x 的动作启用、高于 x 的停用（有高命必有低命，没有低命必没有高命）。</div>
+      </div>`;
+    }).join('');
+    return `<div class="hint mb">这里只列出有动作设置了「达到命座开启 / 达到命座关闭」的角色。设置完之后，动作卡片里「命座要求」下「按达到x命设置动作启用/停用」的勾选状态会同步变化，导出时写进各动作的 <span class="pill">consRequirement</span> 字段与 expression。</div>
+      <div class="scroll">${rows}</div>`;
+  };
+
+  openModal({
+    title: '快捷开关高命座手法',
+    body: render(),
+    actions: [{ label: '关闭', primary: true, value: null }],
+  });
+  $('modalBody').onclick = (e) => {
+    const btn = e.target.closest ? e.target.closest('[data-cons-set]') : null;
+    if (!btn) return;
+    const i = Number(btn.getAttribute('data-cons-set'));
+    const level = Number(btn.getAttribute('data-cons-level'));
+    const ch = chars[i];
+    if (ch === undefined) return;
+    applyConsLevel(state.strategy.actions, ch, level);
+    // 勾选状态直接参与 expression，改完要重跑校验并刷新面板 / 预览
+    refresh(['info', 'actions', 'preview']);
+    $('modalBody').innerHTML = render();
+  };
 }
 
 /* ---------------- 事件与字段处理 ---------------- */
@@ -567,6 +677,7 @@ const infoHandlers = {
   'import': () => doImport(),
   'merge': () => doMerge(),
   'export': () => doExport(),
+  'cons-switch': () => openConsSwitchModal(),
   'new-blank': () => confirmDiscard(() => newStrategy('blank')),
   'new-preset': () => confirmDiscard(() => newStrategy('preset')),
   'drafts': () => openDraftManager(),
@@ -574,10 +685,6 @@ const infoHandlers = {
 
 const infoFieldHandlers = {
   info: (i) => {
-    if (i.field === 'preAvatarSearch') {
-      state.ui.preAvatarSearch = i.value;
-      return 'refresh';
-    }
     state.strategy.info[i.field] = i.value;
     // 「策略名称 / 版本」：只刷新标题与底栏提示，绝不重建面板 ——
     // 重建会打断中文输入法的候选框（change / 组字结束的补发也会走到这里），
@@ -589,12 +696,46 @@ const infoFieldHandlers = {
   pre: (i) => {
     const pa = state.strategy.info.preActions[Number(i.idx)];
     if (!pa) return false;
+    // 角色搜索框：只更新这一行的角色选择框选项，不动模型、不重建面板
+    // （不重建面板才不会打断输入法；搜索框自身也不再弹任何候选层）
+    if (i.field === 'avatarSearch') {
+      setPreSearch(i.idx, i.value);
+      refreshPreAvatarSelect(i.el, i.idx);
+      return false;
+    }
     pa[i.field] = i.value;
-    // 手输指令（或改角色）后立刻做一次输入内容检查：刷新本行反馈 + 右侧校验面板
-    if (i.field === 'cmd' || i.field === 'character') {
+    // 选中角色只更新模型，不重建面板（否则会打断旁边的搜索框与输入法）。
+    // 顺手清空旁边的搜索框：搜索词的作用就是「把角色选择框缩小到几个候选」，
+    // 选完就该恢复成全部角色，否则选择框会一直卡在筛选结果里。
+    if (i.field === 'character') {
+      setPreSearch(i.idx, '');
+      const row = i.el && i.el.closest ? i.el.closest('.row') : null;
+      const box = row && row.querySelector ? row.querySelector('[data-field="avatarSearch"]') : null;
+      if (box) {
+        box.value = '';
+        // 搜索框已经清空：选择框的选项立刻恢复成全部角色（否则会一直卡在筛选结果里）
+        refreshPreAvatarSelect(box, i.idx);
+      }
+      updateCommandFeedback(`pre:${i.idx}`, pa.cmd || '', 'pre');
+      refreshLiveIssues();
+      return false;
+    }
+    // 手输指令后立刻做一次输入内容检查：刷新本行反馈 + 右侧校验面板
+    if (i.field === 'cmd') {
       updateCommandFeedback(`pre:${i.idx}`, pa.cmd || '', 'pre');
       refreshLiveIssues();
     }
     return false;
   },
 };
+
+/** 按该行角色搜索框里的内容重建旁边的角色下拉的选项（不重建面板，输入焦点与输入法都不受影响） */
+function refreshPreAvatarSelect(input, idx) {
+  if (!input || !input.getAttribute) return;
+  const row = input.closest ? input.closest('.row') : null;
+  const sel = row && row.querySelector ? row.querySelector('select[data-field="character"]') : null;
+  if (!sel) return;
+  const n = Number(idx);
+  const pa = (state.strategy.info.preActions || [])[n];
+  sel.innerHTML = avatarFilterOptions(input.value, pa ? (pa.character || '') : '', { pool: AVATARS.filter(a => !a.virtual), allLabel: '（不指定角色）' });
+}

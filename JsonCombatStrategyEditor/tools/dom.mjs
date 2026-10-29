@@ -45,24 +45,23 @@ export function createDom() {
       if (n.startsWith('data-')) this.dataset[n.slice(5)] = String(v);
       // 与浏览器一致：写 class 属性等于改 classList（否则 innerHTML 解析出来的元素用 .cls 选择器选不中）
       if (n === 'class') this.classList.set = new Set(String(v).split(/\s+/).filter(Boolean));
+      // 与浏览器一致：type 属性会反映到 .type 属性上（编辑器靠 el.type === 'checkbox' 取勾选状态，
+      // 解析出来的 input 只有属性、没有属性值时，.type 会是空串，勾选框就会被当成文本框读 value）
+      if (n === 'type') this.type = String(v).toLowerCase();
     }
     removeAttribute(n) { this._attrs.delete(n); }
     hasAttribute(n) { return this._attrs.has(n); }
     get id() { return this.getAttribute('id') || ''; }
     set id(v) { this.setAttribute('id', v); }
-    /** 是否还挂在文档节点树上（innerHTML 重建后旧节点应变为 false） */
+    /** 是否还挂在文档节点树上（innerHTML 重建后旧节点应变为 false）
+     *  实现：沿着 parentNode 往上找根即可 —— 以前是从所有根递归搜索整棵树，
+     *  面板一大（几十万个节点）每次调用都要遍历一遍，测试跑几分钟全都耗在这里。 */
     get isConnected() {
-      const seen = new Set();
-      const find = (n) => {
-        for (const c of n.children) {
-          if (c === this) return true;
-          if (seen.has(c)) continue;
-          seen.add(c);
-          if (find(c)) return true;
-        }
-        return false;
-      };
-      for (const r of roots) if (find(r)) return true;
+      let n = this;
+      while (n) {
+        if (roots.includes(n)) return true;
+        n = n.parentNode;
+      }
       return false;
     }
     get className() { return this.classList.toString(); }
@@ -76,18 +75,31 @@ export function createDom() {
       for (const c of this.children) s += c.textContent;
       return s;
     }
-    set textContent(v) { this.children = []; this._text = String(v); }
+    set textContent(v) { for (const c of this.children) unindexSubtree(c); this.children = []; this._text = String(v); }
 
     appendChild(c) {
       if (c.parentNode) c.parentNode.removeChild(c);
       c.parentNode = this;
       this.children.push(c);
-      if (!roots.includes(this)) roots.push(this);
+      // 增量维护 id 索引：parseInto 是自顶向下建的，每个 appendChild 只会索引新节点自己（O(1)），
+      // 不会变成「每插一个节点重扫整棵树」。
+      indexSubtree(c);
       return c;
     }
-    removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) { this.children.splice(i, 1); c.parentNode = null; } return c; }
+    /** 与浏览器一致：把节点插到 ref 之前（ref 不在自己名下时退化为 append） */
+    insertBefore(c, ref) {
+      if (!ref) return this.appendChild(c);
+      const i = this.children.indexOf(ref);
+      if (i < 0) return this.appendChild(c);
+      if (c.parentNode) c.parentNode.removeChild(c);
+      c.parentNode = this;
+      this.children.splice(i, 0, c);
+      indexSubtree(c);
+      return c;
+    }
+    removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) { this.children.splice(i, 1); c.parentNode = null; unindexSubtree(c); } return c; }
     remove() { if (this.parentNode) this.parentNode.removeChild(this); }
-    addEventListener(t, fn) { if (!this._listeners.has(t)) this._listeners.set(t, []); this._listeners.get(t).push(fn); }
+    addEventListener(t, fn) { const l = this._listeners.get(t) || []; if (!l.includes(fn)) l.push(fn); this._listeners.set(t, l); }
     removeEventListener(t, fn) { const l = this._listeners.get(t) || []; const i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); }
     dispatch(type, ev) {
       const e = Object.assign({
@@ -118,6 +130,7 @@ export function createDom() {
     matches(sel) { return matchOne(this, sel); }
     closest(sel) { return doc.closestFrom(this, sel); }
     querySelector(sel) { return doc.querySelector(sel, this); }
+    /** 与浏览器一致：返回真正的数组（编辑器里到处在用 .find / .map / .filter） */
     querySelectorAll(sel) { return doc.querySelectorAll(sel, this); }
     scrollIntoView() { }
   }
@@ -214,6 +227,8 @@ export function createDom() {
     return out;
   }
   function parseInto(host, html) {
+    // 旧子树要从 id 索引里摘掉（innerHTML 替换不走 removeChild）
+    for (const c of host.children) unindexSubtree(c);
     host.children = [];
     host._text = '';
     const stack = [host];
@@ -238,7 +253,9 @@ export function createDom() {
         if (el.hasAttribute('open')) el.open = true;
         if (el.hasAttribute('value')) el.value = el.getAttribute('value');
         top.appendChild(el);
-        if (!tk.selfClose && !VOID_TAGS.has(tk.tag)) stack.push(el);
+        // 空元素（br / hr / input / img…）永远不会成为父节点 —— 与浏览器一致。
+        // 否则 <hr> 后面的所有内容都会变成 hr 的子节点（hr 不是容器，浏览器里就是兄弟节点）。
+        if (!tk.selfClose && !VOID_TAGS.has(tk.tag.toLowerCase())) stack.push(el);
         continue;
       }
       if (tk.type === 'close') {
@@ -249,7 +266,6 @@ export function createDom() {
     }
     syncSelects(host);
     syncTextareas(host);
-    reindexIds();
   }
 
   /** <textarea> 的内容文本就是它的初始 value（与真实浏览器一致） */
@@ -272,20 +288,6 @@ export function createDom() {
     }
   }
 
-  /** 重建 id 索引：只索引当前挂在节点树上的元素 */
-  function reindexIds() {
-    const seen = new Set();
-    const visit = (n) => {
-      for (const c of n.children) {
-        if (seen.has(c)) continue;
-        seen.add(c);
-        const id = c.getAttribute('id');
-        if (id) byId.set(id, c);
-        visit(c);
-      }
-    };
-    for (const r of roots) visit(r);
-  }
   function serialize(el) {
     let s = el._text;
     for (const c of el.children) {
@@ -300,17 +302,40 @@ export function createDom() {
   }
 
   /* ---------- 文档 ---------- */
-  const byId = new Map();      // 已挂载元素的 id 索引
+  const byId = new Map();      // 挂在文档上的元素的 id 索引（增量维护，见 indexSubtree）
   const applyQueue = new Map(); // 静态 HTML 里声明但尚未挂载的元素
+  // <body>：真实浏览器里一定有；编辑器下载文件时会往它上面挂 <a>。
+  const bodyEl = new Element('body');
+  roots.push(bodyEl);
+
+  /** 把一棵子树的 id 记进索引（同一个 id 多个节点时以先到的为准，与浏览器一致） */
+  function indexSubtree(n) {
+    if (!n || !n.getAttribute) return;
+    const id = n.getAttribute('id');
+    if (id && !byId.has(id)) byId.set(id, n);
+    for (const c of n.children) indexSubtree(c);
+  }
+  /** 把一棵子树的 id 从索引里摘掉（只摘指向自己的那些条目） */
+  function unindexSubtree(n) {
+    if (!n || !n.getAttribute) return;
+    const id = n.getAttribute('id');
+    if (id && byId.get(id) === n) byId.delete(id);
+    for (const c of n.children) unindexSubtree(c);
+  }
+
   const doc = {
     activeElement: null,
+    body: bodyEl,
     _listeners: new Map(),
     createElement(tag) { return new Element(tag); },
     createTextNode(t) { const e = new Element('span'); e._text = String(t); return e; },
+    /** 只返回当前挂在节点树上的节点（id 索引随结构增量维护，与 innerHTML 重建保持一致） */
     getElementById(id) {
-      // 始终以当前节点树为准，避免返回被 innerHTML 替换掉的旧节点
-      const found = walkFirst(el => el.getAttribute('id') === id);
-      if (found) { byId.set(id, found); return found; }
+      const found = byId.get(id);
+      if (found) {
+        if (found.isConnected) return found;
+        byId.delete(id);        // 索引里的是已经脱离文档的旧节点：丢掉，按“找不到”处理
+      }
       if (applyQueue.has(id)) return applyQueue.get(id);
       const el = new Element('div');
       el.setAttribute('id', id);
@@ -321,7 +346,7 @@ export function createDom() {
     mount(el) {
       if (!roots.includes(el)) roots.push(el);
       applyQueue.delete(el.getAttribute('id'));
-      reindexIds();
+      indexSubtree(el);
       return el;
     },
     addEventListener(t, fn) { if (!this._listeners.has(t)) this._listeners.set(t, []); this._listeners.get(t).push(fn); },
@@ -332,7 +357,7 @@ export function createDom() {
       return e;
     },
     querySelectorAll(sel, scope) { const list = parseSelectorList(sel); return walkAll(el => matchAnyChain(el, list), scope); },
-    querySelector(sel, scope) { const r = this.querySelectorAll(sel, scope); return r.length ? r[0] : null; },
+    querySelector(sel, scope) { const list = parseSelectorList(sel); return walkFirst(el => matchAnyChain(el, list), scope); },
     /** 给新解析出来的节点补上文档级监听（模拟浏览器行为，便于测试） */
     addEventListener(t, fn) { if (!this._listeners.has(t)) this._listeners.set(t, []); this._listeners.get(t).push(fn); },
     closestFrom(el, sel) {
@@ -363,17 +388,15 @@ export function createDom() {
     };
     // 指定了 scope 时只在子树里找（与浏览器里 element.querySelector 的语义一致）
     if (scope) { visit(scope); return out; }
+    // 只找挂在文档上的节点 —— 与浏览器一致。
+    // innerHTML 重建会把旧节点摘下来，那些旧节点**不能再**被 document.querySelector 查到，
+    // 否则「同一个 data-id 的旧节点」会先于新节点被选中，测试里的交互就落到了脱离文档的节点上。
     for (const root of roots) visit(root);
-    for (const el of detached) {
-      if (seen.has(el)) continue;
-      seen.add(el);
-      if (pred(el)) out.push(el);
-      visit(el);
-    }
     return out;
   }
 
-  function walkFirst(pred) {
+  /** 深度优先找第一个匹配的元素；给了 scope 就只在它的子树里找（与浏览器里 element.querySelector 一致） */
+  function walkFirst(pred, scope) {
     const seen = new Set();
     const visit = (n) => {
       for (const c of n.children) {
@@ -385,6 +408,7 @@ export function createDom() {
       }
       return null;
     };
+    if (scope) return visit(scope);
     for (const root of roots) { const r = visit(root); if (r) return r; }
     return null;
   }

@@ -91,8 +91,13 @@ tr:hover td{background:#1d2128}
 .actioncard{background:var(--bg2);border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:8px;margin-bottom:10px}
 .actioncard.err{border-left-color:var(--err)}
 .actioncard.warn{border-left-color:var(--warn)}
-.actioncard .hd{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;flex-wrap:wrap}
-.actioncard .hd .nm{font-weight:600}
+/* 卡片标题栏一行放完：动作指令超长时截断（不换行），否则右侧的「复制 / 删除」等按钮会被顶到第三行 */
+.actioncard .hd{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;flex-wrap:nowrap;min-width:0}
+.actioncard .hd .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 指令内容：占满中间的剩余宽度，超长就省略号截断；完整内容展开「动作指令」区块可见，
+   鼠标悬停也有原生 title 提示（hover 拿到的是完整的指令串） */
+.actioncard .hd .cardsummary{flex:1 1 160px;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actioncard .hd>button,.actioncard .hd>[data-cardbadges],.actioncard .hd>.pill,.actioncard .hd>span[data-tagspill]{flex:none}
 .actioncard .bd{padding:0 10px 10px;border-top:1px solid var(--line)}
 details.det{margin:8px 0;padding:2px 0}
 details.det>summary{font-weight:600;color:var(--fg);padding:4px 0;border-bottom:1px solid var(--line);margin-bottom:6px}
@@ -177,7 +182,30 @@ const AVATARS = [
   "id": "20000000",
   "element": 0,
   "noElement": true,
-  "note": "荧/空 同一角色的两种性别；元素随命途变化，BetterGI 不识别其元素属性"
+  "note": "荧/空 同一角色的两种性别；元素随命途变化，BetterGI 不识别其元素属性",
+  "alias": [
+   "主角",
+   "卑鄙的外乡人",
+   "荣誉骑士",
+   "爷",
+   "主",
+   "履刑者",
+   "抽卡不歪真君",
+   "女主",
+   "女主角",
+   "莹",
+   "萤",
+   "黄毛阿姨",
+   "荧妹",
+   "女爷",
+   "包包",
+   "宴宁",
+   "男主",
+   "男主角",
+   "龙哥",
+   "空哥",
+   "男爷"
+  ]
  },
  {
   "code": 0,
@@ -186,7 +214,11 @@ const AVATARS = [
   "id": "10000117",
   "element": 0,
   "noElement": true,
-  "note": "无元素档案（主角类/特殊角色），BetterGI 不识别其元素属性"
+  "note": "无元素档案（主角类/特殊角色），BetterGI 不识别其元素属性",
+  "alias": [
+   "奇偶(男)",
+   "MannequinBoy"
+  ]
  },
  {
   "code": 0,
@@ -195,7 +227,11 @@ const AVATARS = [
   "id": "10000118",
   "element": 0,
   "noElement": true,
-  "note": "无元素档案（主角类/特殊角色），BetterGI 不识别其元素属性"
+  "note": "无元素档案（主角类/特殊角色），BetterGI 不识别其元素属性",
+  "alias": [
+   "奇偶(女)",
+   "MannequinGirl"
+  ]
  },
  {
   "code": 1,
@@ -204,7 +240,20 @@ const AVATARS = [
   "id": "10000002",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kamisato Ayaka",
+   "Ayaka",
+   "神里",
+   "绫华",
+   "神里凌华",
+   "凌华",
+   "白鹭公主",
+   "神里大小姐",
+   "龟",
+   "龟龟",
+   "乌龟"
+  ]
  },
  {
   "code": 1,
@@ -213,7 +262,18 @@ const AVATARS = [
   "id": "10000015",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kaeya",
+   "盖亚",
+   "凯子哥",
+   "凯鸭",
+   "矿工",
+   "矿工头子",
+   "骑兵队长",
+   "凯子",
+   "凝冰渡海真君"
+  ]
  },
  {
   "code": 1,
@@ -222,7 +282,14 @@ const AVATARS = [
   "id": "10000035",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Qiqi",
+   "僵尸",
+   "肚饿真君",
+   "度厄真君",
+   "77"
+  ]
  },
  {
   "code": 1,
@@ -231,7 +298,12 @@ const AVATARS = [
   "id": "10000036",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Chongyun",
+   "纯阳之体",
+   "冰棍"
+  ]
  },
  {
   "code": 1,
@@ -240,7 +312,13 @@ const AVATARS = [
   "id": "10000037",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Ganyu",
+   "椰羊",
+   "椰奶",
+   "王小美"
+  ]
  },
  {
   "code": 1,
@@ -249,7 +327,17 @@ const AVATARS = [
   "id": "10000039",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Diona",
+   "迪欧娜",
+   "dio娜",
+   "冰猫",
+   "猫猫",
+   "猫娘",
+   "喵喵",
+   "调酒师"
+  ]
  },
  {
   "code": 1,
@@ -258,7 +346,28 @@ const AVATARS = [
   "id": "10000045",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Rosaria",
+   "罗莎莉娅",
+   "白色史莱姆",
+   "白史莱姆",
+   "修女",
+   "罗莎利亚",
+   "罗莎利娅",
+   "罗沙莉亚",
+   "罗沙莉娅",
+   "罗沙利亚",
+   "罗沙利娅",
+   "萝莎莉亚",
+   "萝莎莉娅",
+   "萝莎利亚",
+   "萝莎利娅",
+   "萝沙莉亚",
+   "萝沙莉娅",
+   "萝沙利亚",
+   "萝沙利娅"
+  ]
  },
  {
   "code": 1,
@@ -267,7 +376,16 @@ const AVATARS = [
   "id": "10000051",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Eula",
+   "优拉",
+   "尤拉",
+   "尤菈",
+   "浪花骑士",
+   "记仇",
+   "劳伦斯"
+  ]
  },
  {
   "code": 1,
@@ -276,7 +394,10 @@ const AVATARS = [
   "id": "10000062",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Aloy"
+  ]
  },
  {
   "code": 1,
@@ -285,7 +406,14 @@ const AVATARS = [
   "id": "10000063",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Shenhe",
+   "神鹤",
+   "小姨",
+   "小姨子",
+   "审鹤"
+  ]
  },
  {
   "code": 1,
@@ -294,7 +422,13 @@ const AVATARS = [
   "id": "10000074",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Layla",
+   "莱依菈",
+   "来依菈",
+   "来依拉"
+  ]
  },
  {
   "code": 1,
@@ -303,7 +437,13 @@ const AVATARS = [
   "id": "10000080",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Mika",
+   "鹦鹉",
+   "凤头",
+   "凤头鹦鹉"
+  ]
  },
  {
   "code": 1,
@@ -312,7 +452,12 @@ const AVATARS = [
   "id": "10000085",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Freminet",
+   "非米尼",
+   "潜水员"
+  ]
  },
  {
   "code": 1,
@@ -321,7 +466,15 @@ const AVATARS = [
   "id": "10000086",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Wriothesley",
+   "莱欧",
+   "枫丹桑博",
+   "公爵",
+   "典狱长",
+   "牢大"
+  ]
  },
  {
   "code": 1,
@@ -330,7 +483,16 @@ const AVATARS = [
   "id": "10000088",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Charlotte",
+   "夏洛",
+   "夏洛帝",
+   "记者",
+   "小记者",
+   "佳能400D",
+   "400D"
+  ]
  },
  {
   "code": 1,
@@ -339,7 +501,17 @@ const AVATARS = [
   "id": "10000107",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Citlali",
+   "西特菈莉",
+   "西特拉莉",
+   "茜特拉莉",
+   "西特拉利",
+   "黑曜石奶奶",
+   "黑曜石",
+   "奶奶"
+  ]
  },
  {
   "code": 1,
@@ -348,7 +520,14 @@ const AVATARS = [
   "id": "10000112",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Escoffier",
+   "厨师",
+   "爱可非",
+   "艾可菲",
+   "艾可非"
+  ]
  },
  {
   "code": 1,
@@ -357,7 +536,12 @@ const AVATARS = [
   "id": "10000114",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Skirk",
+   "丝柯可",
+   "斯柯克"
+  ]
  },
  {
   "code": 1,
@@ -366,7 +550,10 @@ const AVATARS = [
   "id": "10000129",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Lohen"
+  ]
  },
  {
   "code": 1,
@@ -375,7 +562,11 @@ const AVATARS = [
   "id": "10000133",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Sandrone",
+   "Marionette"
+  ]
  },
  {
   "code": 1,
@@ -384,7 +575,10 @@ const AVATARS = [
   "id": "10000150",
   "element": 1,
   "elementName": "冰元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Odette"
+  ]
  },
  {
   "code": 2,
@@ -393,7 +587,22 @@ const AVATARS = [
   "id": "10000016",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Diluc",
+   "卢姥爷",
+   "姥爷",
+   "卢老爷",
+   "卢锅巴",
+   "正义人",
+   "正e人",
+   "正E人",
+   "卢本伟",
+   "暗夜英雄",
+   "卢卢伯爵",
+   "落魄了",
+   "落魄了家人们"
+  ]
  },
  {
   "code": 2,
@@ -402,7 +611,18 @@ const AVATARS = [
   "id": "10000021",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Amber",
+   "安伯",
+   "兔兔伯爵",
+   "飞行冠军",
+   "侦查骑士",
+   "点火姬",
+   "点火机",
+   "打火机",
+   "打火姬"
+  ]
  },
  {
   "code": 2,
@@ -411,7 +631,15 @@ const AVATARS = [
   "id": "10000023",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Xiangling",
+   "香玲",
+   "锅巴",
+   "厨师",
+   "万民堂厨师",
+   "香师傅"
+  ]
  },
  {
   "code": 2,
@@ -420,7 +648,24 @@ const AVATARS = [
   "id": "10000029",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "逃跑的太阳",
+   "Klee",
+   "嘟嘟可",
+   "火花骑士",
+   "蹦蹦炸弹",
+   "炸鱼",
+   "放火烧山",
+   "放火烧山真君",
+   "蒙德最强战力",
+   "啦啦啦",
+   "哒哒哒",
+   "炸弹人",
+   "禁闭室",
+   "太阳",
+   "小太阳"
+  ]
  },
  {
   "code": 2,
@@ -429,7 +674,20 @@ const AVATARS = [
   "id": "10000032",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Bennett",
+   "点赞哥",
+   "点赞",
+   "倒霉少年",
+   "倒霉蛋",
+   "霹雳闪雷真君",
+   "班神",
+   "班爷",
+   "倒霉",
+   "蒙德火神",
+   "六星真神"
+  ]
  },
  {
   "code": 2,
@@ -438,7 +696,13 @@ const AVATARS = [
   "id": "10000044",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Xinyan",
+   "辛炎",
+   "黑妹",
+   "摇滚"
+  ]
  },
  {
   "code": 2,
@@ -447,7 +711,23 @@ const AVATARS = [
   "id": "10000046",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Hu Tao",
+   "HuTao",
+   "Hutao",
+   "胡淘",
+   "往生堂堂主",
+   "火化",
+   "抬棺的",
+   "蝴蝶",
+   "核桃",
+   "堂主",
+   "胡堂主",
+   "雪霁梅香",
+   "桃子",
+   "桃"
+  ]
  },
  {
   "code": 2,
@@ -456,7 +736,13 @@ const AVATARS = [
   "id": "10000048",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yanfei",
+   "烟老师",
+   "律师",
+   "罗翔"
+  ]
  },
  {
   "code": 2,
@@ -465,7 +751,15 @@ const AVATARS = [
   "id": "10000049",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yoimiya",
+   "霄宫",
+   "烟花",
+   "肖宫",
+   "肖工",
+   "绷带女孩"
+  ]
  },
  {
   "code": 2,
@@ -474,7 +768,15 @@ const AVATARS = [
   "id": "10000050",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Thoma",
+   "家政官",
+   "太郎丸",
+   "地头蛇",
+   "男仆",
+   "拖马"
+  ]
  },
  {
   "code": 2,
@@ -483,7 +785,14 @@ const AVATARS = [
   "id": "10000079",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Dehya",
+   "迪希亚",
+   "迪希娅",
+   "迪西雅",
+   "迪西亚"
+  ]
  },
  {
   "code": 2,
@@ -492,7 +801,15 @@ const AVATARS = [
   "id": "10000084",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Lyney",
+   "林妮",
+   "琳尼",
+   "琳妮",
+   "男魔术师",
+   "魔术师"
+  ]
  },
  {
   "code": 2,
@@ -501,7 +818,11 @@ const AVATARS = [
   "id": "10000090",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "chevreuse",
+   "夏沃雷"
+  ]
  },
  {
   "code": 2,
@@ -510,7 +831,17 @@ const AVATARS = [
   "id": "10000092",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Gaming",
+   "jiaming",
+   "佳明",
+   "嘉铭",
+   "家明",
+   "镖师",
+   "舞狮少年",
+   "舞狮"
+  ]
  },
  {
   "code": 2,
@@ -519,7 +850,16 @@ const AVATARS = [
   "id": "10000096",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Arlecchino",
+   "阿雷奇诺",
+   "仆人",
+   "黑优菈",
+   "黑暗优菈",
+   "父亲",
+   "佩露薇利"
+  ]
  },
  {
   "code": 2,
@@ -528,7 +868,16 @@ const AVATARS = [
   "id": "10000106",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Mavuika",
+   "火神",
+   "马薇卡",
+   "玛维卡",
+   "马维卡",
+   "马微卡",
+   "玛微卡"
+  ]
  },
  {
   "code": 2,
@@ -537,7 +886,10 @@ const AVATARS = [
   "id": "10000123",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Durin"
+  ]
  },
  {
   "code": 2,
@@ -546,7 +898,10 @@ const AVATARS = [
   "id": "10000131",
   "element": 2,
   "elementName": "火元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Nicole"
+  ]
  },
  {
   "code": 3,
@@ -555,7 +910,17 @@ const AVATARS = [
   "id": "10000014",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Barbara",
+   "巴巴拉",
+   "内鬼",
+   "加湿器",
+   "肉身解咒",
+   "肉身解咒真君",
+   "闪耀偶像",
+   "偶像"
+  ]
  },
  {
   "code": 3,
@@ -564,7 +929,15 @@ const AVATARS = [
   "id": "10000025",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Xingqiu",
+   "秋秋人",
+   "秋妹妹",
+   "书呆子",
+   "枕玉",
+   "飞云商会二少爷"
+  ]
  },
  {
   "code": 3,
@@ -573,7 +946,20 @@ const AVATARS = [
   "id": "10000033",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Tartaglia",
+   "Childe",
+   "Ajax",
+   "达达鸭",
+   "达达利鸭",
+   "公子",
+   "玩具销售员",
+   "玩具推销员",
+   "钱包",
+   "鸭鸭",
+   "愚人众末席"
+  ]
  },
  {
   "code": 3,
@@ -582,7 +968,21 @@ const AVATARS = [
   "id": "10000041",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Mona",
+   "穷鬼",
+   "穷光蛋",
+   "穷",
+   "莫纳",
+   "占星术士",
+   "占星师",
+   "讨龙真君",
+   "半部讨龙真君",
+   "阿斯托洛吉斯·莫娜·梅姬斯图斯",
+   "梅姬斯图斯",
+   "梅姬斯图斯姬"
+  ]
  },
  {
   "code": 3,
@@ -591,7 +991,19 @@ const AVATARS = [
   "id": "10000054",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Sangonomiya Kokomi",
+   "Kokomi",
+   "心海",
+   "军师",
+   "珊瑚宫",
+   "书记",
+   "观赏鱼",
+   "水母",
+   "鱼",
+   "美人鱼"
+  ]
  },
  {
   "code": 3,
@@ -600,7 +1012,14 @@ const AVATARS = [
   "id": "10000060",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yelan",
+   "夜阑",
+   "叶澜",
+   "腋兰",
+   "夜天后"
+  ]
  },
  {
   "code": 3,
@@ -609,7 +1028,18 @@ const AVATARS = [
   "id": "10000066",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kamisato Ayato",
+   "Ayato",
+   "绫人",
+   "神里凌人",
+   "凌人",
+   "0人",
+   "神人",
+   "零人",
+   "大舅哥"
+  ]
  },
  {
   "code": 3,
@@ -618,7 +1048,14 @@ const AVATARS = [
   "id": "10000070",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Nilou",
+   "尼露",
+   "妮璐",
+   "舞娘",
+   "红牛"
+  ]
  },
  {
   "code": 3,
@@ -627,7 +1064,11 @@ const AVATARS = [
   "id": "10000072",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Candace",
+   "坎迪斯"
+  ]
  },
  {
   "code": 3,
@@ -636,7 +1077,18 @@ const AVATARS = [
   "id": "10000087",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Neuvillette",
+   "那维",
+   "水龙王",
+   "水龙",
+   "审判官",
+   "海獭",
+   "龙王",
+   "最高审判官",
+   "水之龙王"
+  ]
  },
  {
   "code": 3,
@@ -645,7 +1097,15 @@ const AVATARS = [
   "id": "10000089",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Furina",
+   "Focalors",
+   "水神",
+   "芙芙",
+   "芙卡洛斯",
+   "傻芙芙"
+  ]
  },
  {
   "code": 3,
@@ -654,7 +1114,13 @@ const AVATARS = [
   "id": "10000095",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Sigewinne",
+   "希格文",
+   "护士",
+   "护士长"
+  ]
  },
  {
   "code": 3,
@@ -663,7 +1129,16 @@ const AVATARS = [
   "id": "10000102",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Mualani",
+   "马拉尼",
+   "鲨鱼妹",
+   "海豹妹",
+   "海豹",
+   "纳塔鲨",
+   "逐浪客"
+  ]
  },
  {
   "code": 3,
@@ -672,7 +1147,14 @@ const AVATARS = [
   "id": "10000115",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Dahlia",
+   "塔利亚",
+   "塔丽雅",
+   "主祭",
+   "助祭"
+  ]
  },
  {
   "code": 3,
@@ -681,7 +1163,10 @@ const AVATARS = [
   "id": "10000121",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Aino"
+  ]
  },
  {
   "code": 3,
@@ -690,7 +1175,14 @@ const AVATARS = [
   "id": "10000125",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Columbina",
+   "少女",
+   "库塔尔",
+   "月神",
+   "月之少女"
+  ]
  },
  {
   "code": 3,
@@ -699,7 +1191,12 @@ const AVATARS = [
   "id": "10000140",
   "element": 3,
   "elementName": "水元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "沃",
+   "水妖",
+   "Vodyanitsa"
+  ]
  },
  {
   "code": 4,
@@ -708,7 +1205,14 @@ const AVATARS = [
   "id": "10000006",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Lisa",
+   "图书管理员",
+   "图书馆管理员",
+   "蔷薇魔女",
+   "阿姨"
+  ]
  },
  {
   "code": 4,
@@ -717,7 +1221,17 @@ const AVATARS = [
   "id": "10000020",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Razor",
+   "狼少年",
+   "狼崽子",
+   "狼崽",
+   "卢皮卡",
+   "小狼",
+   "小狼狗",
+   "狼孩"
+  ]
  },
  {
   "code": 4,
@@ -726,7 +1240,13 @@ const AVATARS = [
   "id": "10000024",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Beidou",
+   "大姐头",
+   "大姐",
+   "无冕的龙王"
+  ]
  },
  {
   "code": 4,
@@ -735,7 +1255,19 @@ const AVATARS = [
   "id": "10000031",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Fischl",
+   "皇女",
+   "小艾米",
+   "小艾咪",
+   "奥兹",
+   "断罪皇女",
+   "中二病",
+   "中二少女",
+   "中二皇女",
+   "奥兹发射器"
+  ]
  },
  {
   "code": 4,
@@ -744,7 +1276,24 @@ const AVATARS = [
   "id": "10000042",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Keqing",
+   "刻情",
+   "氪晴",
+   "刻师傅",
+   "刻师父",
+   "牛杂",
+   "牛杂师傅",
+   "斩尽牛杂",
+   "免疫",
+   "免疫免疫",
+   "屁斜剑法",
+   "玉衡星",
+   "阿晴",
+   "啊晴",
+   "璃月雷神"
+  ]
  },
  {
   "code": 4,
@@ -753,7 +1302,22 @@ const AVATARS = [
   "id": "10000052",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Raiden Shogun",
+   "Raiden",
+   "雷神",
+   "将军",
+   "雷军",
+   "巴尔",
+   "阿影",
+   "影",
+   "巴尔泽布",
+   "煮饭婆",
+   "奶香一刀",
+   "无想一刀",
+   "宅女"
+  ]
  },
  {
   "code": 4,
@@ -762,7 +1326,16 @@ const AVATARS = [
   "id": "10000056",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kujou Sara",
+   "Sara",
+   "九条",
+   "九条沙罗",
+   "裟罗",
+   "沙罗",
+   "天狗"
+  ]
  },
  {
   "code": 4,
@@ -771,7 +1344,25 @@ const AVATARS = [
   "id": "10000058",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yae Miko",
+   "Miko",
+   "八重",
+   "神子",
+   "狐狸",
+   "想得美哦",
+   "巫女",
+   "屑狐狸",
+   "骚狐狸",
+   "八重宫司",
+   "婶子",
+   "小八",
+   "八重寄子",
+   "寄子",
+   "八神虫子",
+   "八神重子"
+  ]
  },
  {
   "code": 4,
@@ -780,7 +1371,21 @@ const AVATARS = [
   "id": "10000065",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kuki Shinobu",
+   "Kuki",
+   "Shinobu",
+   "97忍",
+   "小忍",
+   "久歧忍",
+   "97",
+   "茄忍",
+   "茄子",
+   "紫茄子",
+   "阿忍",
+   "忍姐"
+  ]
  },
  {
   "code": 4,
@@ -789,7 +1394,13 @@ const AVATARS = [
   "id": "10000068",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Dori",
+   "多利",
+   "多力",
+   "奸商"
+  ]
  },
  {
   "code": 4,
@@ -798,7 +1409,14 @@ const AVATARS = [
   "id": "10000071",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Cyno",
+   "塞诺",
+   "胡狼",
+   "大风纪官",
+   "大风机关"
+  ]
  },
  {
   "code": 4,
@@ -807,7 +1425,13 @@ const AVATARS = [
   "id": "10000097",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Sethos",
+   "塞索斯",
+   "塞索思",
+   "赛索思"
+  ]
  },
  {
   "code": 4,
@@ -816,7 +1440,15 @@ const AVATARS = [
   "id": "10000098",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Clorinde",
+   "琳德",
+   "科洛琳德",
+   "克洛林德",
+   "克罗林德",
+   "苹果姐"
+  ]
  },
  {
   "code": 4,
@@ -825,7 +1457,14 @@ const AVATARS = [
   "id": "10000105",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Ororon",
+   "庇笛",
+   "孙子",
+   "大孙子",
+   "蝙蝠侠"
+  ]
  },
  {
   "code": 4,
@@ -834,7 +1473,14 @@ const AVATARS = [
   "id": "10000110",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Iansan",
+   "123",
+   "伊安姗",
+   "教练",
+   "依安珊"
+  ]
  },
  {
   "code": 4,
@@ -843,7 +1489,21 @@ const AVATARS = [
   "id": "10000111",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Varesa",
+   "瓦蕾莎",
+   "瓦蕾沙",
+   "瓦蕾砂",
+   "瓦雷沙",
+   "牛头人",
+   "牛战士",
+   "牛牛",
+   "雷牛",
+   "雷牛牛",
+   "奶牛",
+   "粉牛"
+  ]
  },
  {
   "code": 4,
@@ -852,7 +1512,12 @@ const AVATARS = [
   "id": "10000116",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Ineffa",
+   "机器人",
+   "机娘"
+  ]
  },
  {
   "code": 4,
@@ -861,7 +1526,10 @@ const AVATARS = [
   "id": "10000120",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Flins"
+  ]
  },
  {
   "code": 4,
@@ -870,7 +1538,10 @@ const AVATARS = [
   "id": "10000148",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Alyosha"
+  ]
  },
  {
   "code": 4,
@@ -879,7 +1550,10 @@ const AVATARS = [
   "id": "10000137",
   "element": 4,
   "elementName": "雷元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Valeriy"
+  ]
  },
  {
   "code": 5,
@@ -888,7 +1562,14 @@ const AVATARS = [
   "id": "10000003",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Jean",
+   "团长",
+   "代理团长",
+   "琴团长",
+   "蒲公英骑士"
+  ]
  },
  {
   "code": 5,
@@ -897,7 +1578,23 @@ const AVATARS = [
   "id": "10000022",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Venti",
+   "温蒂",
+   "风神",
+   "卖唱的",
+   "巴巴托斯",
+   "巴巴脱丝",
+   "芭芭托斯",
+   "芭芭脱丝",
+   "干点正事",
+   "不干正事",
+   "吟游诗人",
+   "诶嘿",
+   "唉嘿",
+   "摸鱼"
+  ]
  },
  {
   "code": 5,
@@ -906,7 +1603,23 @@ const AVATARS = [
   "id": "10000026",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Xiao",
+   "打桩机",
+   "插秧",
+   "三眼五显仙人",
+   "三眼五显真人",
+   "降魔大圣",
+   "护法夜叉",
+   "快乐风男",
+   "无聊",
+   "靖妖傩舞",
+   "矮子仙人",
+   "三点五尺仙人",
+   "跳跳虎",
+   "风夜叉"
+  ]
  },
  {
   "code": 5,
@@ -915,7 +1628,11 @@ const AVATARS = [
   "id": "10000043",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Sucrose",
+   "sucrose"
+  ]
  },
  {
   "code": 5,
@@ -924,7 +1641,15 @@ const AVATARS = [
   "id": "10000047",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kaedehara Kazuha",
+   "Kazuha",
+   "万叶",
+   "叶天帝",
+   "天帝",
+   "叶师傅"
+  ]
  },
  {
   "code": 5,
@@ -933,7 +1658,14 @@ const AVATARS = [
   "id": "10000053",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Sayu",
+   "小狸猫",
+   "狸猫",
+   "忍者",
+   "貉"
+  ]
  },
  {
   "code": 5,
@@ -942,7 +1674,16 @@ const AVATARS = [
   "id": "10000059",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "shikanoin heizou",
+   "Heizou",
+   "鹿野苑",
+   "鹿野院",
+   "平藏",
+   "鹿野苑平藏",
+   "小鹿"
+  ]
  },
  {
   "code": 5,
@@ -951,7 +1692,18 @@ const AVATARS = [
   "id": "10000075",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Wanderer",
+   "散兵",
+   "国崩",
+   "雷电国崩",
+   "大炮",
+   "雷电大炮",
+   "雷大炮",
+   "伞兵",
+   "斯卡拉姆齐"
+  ]
  },
  {
   "code": 5,
@@ -960,7 +1712,20 @@ const AVATARS = [
   "id": "10000076",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Faruzan",
+   "法露珊",
+   "法璐珊",
+   "法露姗",
+   "法璐姗",
+   "珐露姗",
+   "珐璐姗",
+   "百岁珊",
+   "百岁山",
+   "前辈",
+   "仙贝"
+  ]
  },
  {
   "code": 5,
@@ -969,7 +1734,17 @@ const AVATARS = [
   "id": "10000083",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Lynette",
+   "林妮特",
+   "林尼特",
+   "琳尼特",
+   "女魔术师",
+   "魔术猫",
+   "魔术喵",
+   "登登"
+  ]
  },
  {
   "code": 5,
@@ -978,7 +1753,19 @@ const AVATARS = [
   "id": "10000093",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Xianyun",
+   "流云",
+   "刘云",
+   "留云",
+   "野鹤",
+   "那个女人",
+   "留云借风",
+   "留云借风真君",
+   "很会聊天",
+   "很会聊天真君"
+  ]
  },
  {
   "code": 5,
@@ -987,7 +1774,13 @@ const AVATARS = [
   "id": "10000104",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Chasca",
+   "武卡",
+   "调停人",
+   "鸟人"
+  ]
  },
  {
   "code": 5,
@@ -996,7 +1789,18 @@ const AVATARS = [
   "id": "10000108",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Lanyan",
+   "蓝燕",
+   "兰砚",
+   "兰燕",
+   "藤编师",
+   "风鹰侠",
+   "蓝研",
+   "蓝颜",
+   "兰颜"
+  ]
  },
  {
   "code": 5,
@@ -1005,7 +1809,22 @@ const AVATARS = [
   "id": "10000109",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yumemizuki Mizuki",
+   "Mizuki",
+   "梦见",
+   "梦见月",
+   "瑞希",
+   "瑞幸",
+   "木更",
+   "梗小姐",
+   "食梦貘",
+   "梦魔",
+   "魅魔",
+   "心理医生",
+   "心理诊疗师"
+  ]
  },
  {
   "code": 5,
@@ -1014,7 +1833,12 @@ const AVATARS = [
   "id": "10000113",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Ifa",
+   "哥们",
+   "医生"
+  ]
  },
  {
   "code": 5,
@@ -1023,7 +1847,10 @@ const AVATARS = [
   "id": "10000124",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Jahoda"
+  ]
  },
  {
   "code": 5,
@@ -1032,7 +1859,12 @@ const AVATARS = [
   "id": "10000128",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Varka",
+   "团长",
+   "法尔加"
+  ]
  },
  {
   "code": 5,
@@ -1041,7 +1873,10 @@ const AVATARS = [
   "id": "10000132",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Prune"
+  ]
  },
  {
   "code": 5,
@@ -1050,7 +1885,12 @@ const AVATARS = [
   "id": "10000143",
   "element": 5,
   "elementName": "风元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "没头脑",
+   "风仙",
+   "Vesna"
+  ]
  },
  {
   "code": 6,
@@ -1059,7 +1899,13 @@ const AVATARS = [
   "id": "10000027",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Ningguang",
+   "富婆",
+   "天权星",
+   "天权"
+  ]
  },
  {
   "code": 6,
@@ -1068,7 +1914,19 @@ const AVATARS = [
   "id": "10000030",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Zhongli",
+   "摩拉克斯",
+   "岩王爷",
+   "岩神",
+   "钟师傅",
+   "天动万象",
+   "岩王帝君",
+   "未来可期",
+   "帝君",
+   "拒收病婿"
+  ]
  },
  {
   "code": 6,
@@ -1077,7 +1935,13 @@ const AVATARS = [
   "id": "10000034",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Noelle",
+   "女仆",
+   "高达",
+   "岩王帝姬"
+  ]
  },
  {
   "code": 6,
@@ -1086,7 +1950,21 @@ const AVATARS = [
   "id": "10000038",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Albedo",
+   "可莉哥哥",
+   "升降机",
+   "升降台",
+   "电梯",
+   "白垩之子",
+   "贝爷",
+   "白垩",
+   "阿贝少",
+   "花呗多",
+   "阿贝夕",
+   "阿师傅"
+  ]
  },
  {
   "code": 6,
@@ -1095,7 +1973,14 @@ const AVATARS = [
   "id": "10000055",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Gorou",
+   "柴犬",
+   "土狗",
+   "希娜",
+   "希娜小姐"
+  ]
  },
  {
   "code": 6,
@@ -1104,7 +1989,27 @@ const AVATARS = [
   "id": "10000057",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Arataki Itto",
+   "Itto",
+   "荒龙一斗",
+   "荒泷天下第一斗",
+   "一斗",
+   "一抖",
+   "荒泷",
+   "1斗",
+   "岩牛",
+   "岩牛牛",
+   "斗战岩牛",
+   "斗子哥",
+   "牛子哥",
+   "牛子",
+   "孩子王",
+   "斗虫",
+   "巧乐兹",
+   "放牛的"
+  ]
  },
  {
   "code": 6,
@@ -1113,7 +2018,15 @@ const AVATARS = [
   "id": "10000064",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yun Jin",
+   "yun jin",
+   "云瑾",
+   "云先生",
+   "云锦",
+   "神女劈观"
+  ]
  },
  {
   "code": 6,
@@ -1122,7 +2035,18 @@ const AVATARS = [
   "id": "10000091",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "navia",
+   "大小姐",
+   "刺玫会",
+   "黄豆",
+   "流汗黄豆",
+   "黄豆姐",
+   "娜薇娅",
+   "娜薇雅",
+   "娜维雅"
+  ]
  },
  {
   "code": 6,
@@ -1131,7 +2055,14 @@ const AVATARS = [
   "id": "10000094",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Chiori",
+   "千只",
+   "设计师",
+   "裁缝",
+   "千织屋老板"
+  ]
  },
  {
   "code": 6,
@@ -1140,7 +2071,16 @@ const AVATARS = [
   "id": "10000100",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kachina",
+   "卡奇娜",
+   "卡齐纳",
+   "卡齐那",
+   "卡其那",
+   "冲天钻钻",
+   "岩莉莉"
+  ]
  },
  {
   "code": 6,
@@ -1149,7 +2089,16 @@ const AVATARS = [
   "id": "10000103",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Xilonen",
+   "豹女",
+   "岩大猫",
+   "大岩猫",
+   "岩猫",
+   "岩猫猫",
+   "西诺宁"
+  ]
  },
  {
   "code": 6,
@@ -1158,7 +2107,12 @@ const AVATARS = [
   "id": "10000126",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Zibai",
+   "白马仙人",
+   "白马"
+  ]
  },
  {
   "code": 6,
@@ -1167,7 +2121,12 @@ const AVATARS = [
   "id": "10000127",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Illuga",
+   "少爷",
+   "小少爷"
+  ]
  },
  {
   "code": 6,
@@ -1176,7 +2135,10 @@ const AVATARS = [
   "id": "10000130",
   "element": 6,
   "elementName": "岩元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Linnea"
+  ]
  },
  {
   "code": 7,
@@ -1185,7 +2147,22 @@ const AVATARS = [
   "id": "10000061",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kirara",
+   "大猫猫",
+   "大喵喵",
+   "稻妻猫猫",
+   "绮娘娘",
+   "琦良良",
+   "良良",
+   "快递员",
+   "草猫",
+   "草猫猫",
+   "草喵",
+   "草喵喵",
+   "猫又"
+  ]
  },
  {
   "code": 7,
@@ -1194,7 +2171,17 @@ const AVATARS = [
   "id": "10000067",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Collei",
+   "柯来",
+   "科莱",
+   "科来",
+   "小天使",
+   "须弥安柏",
+   "草安柏",
+   "须弥飞行冠军"
+  ]
  },
  {
   "code": 7,
@@ -1203,7 +2190,13 @@ const AVATARS = [
   "id": "10000069",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Tighnari",
+   "提那里",
+   "小提",
+   "驴"
+  ]
  },
  {
   "code": 7,
@@ -1212,7 +2205,22 @@ const AVATARS = [
   "id": "10000073",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Nahida",
+   "草神",
+   "小吉祥",
+   "大吉祥",
+   "小草神",
+   "大慈树王",
+   "小吉祥草王",
+   "草萝莉",
+   "羽毛球",
+   "摩诃善法大吉祥智慧主",
+   "智慧主",
+   "智慧之神",
+   "布耶尔"
+  ]
  },
  {
   "code": 7,
@@ -1221,7 +2229,13 @@ const AVATARS = [
   "id": "10000077",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Yaoyao",
+   "遥遥",
+   "萝卜",
+   "月桂"
+  ]
  },
  {
   "code": 7,
@@ -1230,7 +2244,15 @@ const AVATARS = [
   "id": "10000078",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Alhaitham",
+   "海哥",
+   "埃尔海森",
+   "海森",
+   "海参",
+   "书记官"
+  ]
  },
  {
   "code": 7,
@@ -1239,7 +2261,11 @@ const AVATARS = [
   "id": "10000081",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kaveh",
+   "艾尔海森室友"
+  ]
  },
  {
   "code": 7,
@@ -1248,7 +2274,12 @@ const AVATARS = [
   "id": "10000082",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Baizhu",
+   "长生",
+   "白医生"
+  ]
  },
  {
   "code": 7,
@@ -1257,7 +2288,14 @@ const AVATARS = [
   "id": "10000099",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Emilie",
+   "调香师",
+   "艾梅",
+   "香水设计师",
+   "现场清理人"
+  ]
  },
  {
   "code": 7,
@@ -1266,7 +2304,13 @@ const AVATARS = [
   "id": "10000101",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Kinich",
+   "基哥",
+   "基尼齐",
+   "蜘蛛侠"
+  ]
  },
  {
   "code": 7,
@@ -1275,7 +2319,10 @@ const AVATARS = [
   "id": "10000119",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Lauma"
+  ]
  },
  {
   "code": 7,
@@ -1284,7 +2331,10 @@ const AVATARS = [
   "id": "10000122",
   "element": 7,
   "elementName": "草元素",
-  "noElement": false
+  "noElement": false,
+  "alias": [
+   "Nefer"
+  ]
  }
 ];
 
@@ -1905,6 +2955,16 @@ function condExplainFunction(call, opts) {
   const num = (a, d) => (a && a.type === 'number' ? a.value : d);
   const argText = (a) => condToText(a);
   const refArg = (a) => (opts ? condRefHtml(a, opts) : condEsc(condRefText(a, opts)));
+  /**
+   * 参数释义：入参本身是「入参为动作的条件函数」（since / count / last-exec）时，
+   * 也要把它自己的动作参数渲染成动作名 —— min/max 会把这类函数整段套在里面的情况
+   * （min(since(43111), since(2))）就靠这里显示被引用的动作名，
+   * 否则只会原样打印 index 数字，看不出引用的是哪条动作。
+   * 找不到对应动作 / 没传 opts 时仍是原来的纯文本写法。
+   */
+  const explainArg = (a) => (a && a.type === 'call' && ['since', 'count', 'last-exec'].includes(a.lower)
+    ? condExplainFunction(a, opts)
+    : argText(a));
 
   switch (fn.name) {
     case 't': return '开战至今的秒数';
@@ -1946,8 +3006,8 @@ function condExplainFunction(call, opts) {
     case 'low-hp': return '当前出战角色处于低血量';
     case 'onfield': return '本动作所属角色已经在场上';
     case 'in-party': return call.args.length === 0 ? '某个角色是否在队伍中（参数缺失）' : `角色「${call.args[0].name ? call.args[0].name : argText(call.args[0])}」在队伍中`;
-    case 'min': return `取最小值：${call.args.map(argText).join('、')}`;
-    case 'max': return `取最大值：${call.args.map(argText).join('、')}`;
+    case 'min': return `取最小值：${call.args.map(explainArg).join('、')}`;
+    case 'max': return `取最大值：${call.args.map(explainArg).join('、')}`;
     default: return fn.cn;
   }
 }
@@ -2294,6 +3354,229 @@ function condCollectConversions(ast, actionNames) {
  * 这样“次于战斗检查与标记”= 10000 正好等于“优先于开盾”，各段首尾相接不重叠。 */
 const ACTION_CODE_BASE = { 0: 0, 1: 10000, 2: 20000, 3: 30000, 4: 40000, 5: 50000, 6: 60000, 7: 70000, 8: 80000, 9: 90000 };
 const MAX_SLOT = 9;
+/**
+ * 动作类型 0（战斗检查与标记）只能用于「当前角色」，编号是「退化的 1 位尾数」：正常只会有 1~9。
+ * 万一 9 个槽位都满了（例如「新建（含兜底动作）」以及后续手工添加），再往后分配会落到 index=10；
+ * parseIndex 把 10~9999 判成「位数不足」并报错，所以这里单独给类型 0 留一个额外槽位：
+ * 尾数取 10 → index 退化成 2 位数字（10），语义上仍然是「类型 0 的第 10 条」，
+ * 校验面板会提示需要「按规则重排编号」。
+ */
+const MAX_SLOT_TYPE0 = 10;
+/** 某个动作类型的尾数上限（类型 0 多留一个槽位，见 MAX_SLOT_TYPE0） */
+function maxSlotOfType(type) { return Number(type) === 0 ? MAX_SLOT_TYPE0 : MAX_SLOT; }
+/** 某个动作类型最多能有几条动作 */
+function capacityOfType(type) { return Number(type) === 0 ? MAX_SLOT_TYPE0 : MAX_SLOT; }
+
+/* ---------------- 命座要求（consRequirement） ----------------
+ * BetterGI 的动作节点里没有任何能保存「这条动作要求角色几命」的字段，
+ * 而 Newtonsoft.Json 默认忽略未知属性（MissingMemberHandling.Ignore），
+ * 于是本编辑器把命座要求写进自定义字段 consRequirement，约定：
+ *   0      —— 无命座要求（导出时省略该字段；导入时缺省也按 0 处理）；
+ *   1~6    —— 「达到命座开启」：达到 x 命时这条动作改为执行（正数 = 模式是“开启”）；
+ *   -1~-6  —— 「达到命座关闭」：达到 x 命时这条动作改为不执行（负数 = 模式是“关闭”）。
+ *
+ * 界面上编辑的是「模式（达到命座开启 / 达到命座关闭）+ 目标命座数 + 按达到x命设置动作启用/停用」：
+ *   · consMode   —— 'none' | 'open' | 'close'
+ *   · consTarget —— 目标命座数 1~6（'none' 时是 0）
+ *   · consEnabled—— 勾了「按达到x命设置动作启用/停用」之后，这条动作在**目标命座之上**是否启用
+ *                   （true = 启用、false = 停用，也就是 expression 里那个布尔值）
+ *
+ * 三个信息分别落在两个地方，合起来是**一一对应**的，可以逐字还原：
+ *   · consRequirement 的**符号** —— 「模式」（正 = 达到命座开启、负 = 达到命座关闭）、
+ *     绝对值 —— 目标命座数；
+ *   · expression 里那一段布尔字面量（wantConsValue → consExprText）—— 「启用 / 停用」；
+ *   · 勾选状态 = （模式是「开启」）=== 那个布尔值（见 consEnabledFromExpr）。
+ * 例：「达到命座关闭 + 3 命 + 勾选」= 3 命及以上停用 → consRequirement = -3、expression 片段是 false、
+ * 勾选状态 true；「达到命座关闭 + 3 命 + 不勾选」= 3 命及以上仍然启用 → 也是 -3，但 expression 片段是 true、
+ * 勾选状态 false。两种写法语义不同却共用同一个数值，靠 expression 里的布尔值区分。
+ */
+const CONS_MODES = ['none', 'open', 'close'];
+const CONS_MAX = 6;
+
+/** 这条动作是否设置了命座要求（模式不是「无命座要求」且目标命座数有效） */
+function consHasRequirement(act) {
+  return !!act && CONS_MODES.includes(act.consMode) && act.consMode !== 'none' && Number(act.consTarget) > 0;
+}
+/** 命座要求那一段的布尔值（true = 达到目标命座时这条动作被启用）；没有命座要求时返回 null */
+function wantConsValue(act) {
+  if (!consHasRequirement(act)) return null;
+  // 「达到命座开启」+ 勾选 → true（x 命及以上执行）；
+  // 「达到命座关闭」+ 勾选 → false（x 命及以上不执行）；不勾选时各自相反。
+  const on = (act.consMode === 'open') === !!act.consEnabled;
+  if (typeof CONSWANT_DEBUG !== 'undefined' && CONSWANT_DEBUG) console.log('[wantConsValue]', act.name, act.consMode, act.consTarget, act.consEnabled, '->', on);
+  return on;
+}
+/** 「命座要求」那一段的表达式文本（true / false）；没有命座要求时返回 '' */
+function consExprText(act) {
+  const v = wantConsValue(act);
+  return v === null ? '' : (v ? 'true' : 'false');
+}
+/** 写进 consRequirement 字段的数值（0 = 无需写这个字段）
+ *  符号 = 模式（正数 = 达到命座开启、负数 = 达到命座关闭），绝对值 = 目标命座数；
+ *  「启用 / 停用」由 expression 里那个布尔字面量表达（见 wantConsValue → consExprText）。 */
+function consRequirementOf(act) {
+  if (!consHasRequirement(act)) return 0;
+  const x = Number(act.consTarget);
+  return act.consMode === 'close' ? -x : x;
+}
+/**
+ * 由 consRequirement 数值 + expression 里的布尔值还原「模式 + 目标命座数 + 启用/停用」三元组。
+ * exprValue 是 expression 里那一段布尔字面量（true / false；没有那一段时按 true 处理）。
+ */
+function consEnabledFromExpr(mode, exprValue) {
+  return (mode === 'open') === (exprValue === undefined || exprValue === null ? true : !!exprValue);
+}
+/** 由 consRequirement 数值还原「模式 + 目标命座数」；没有可用数值时清空命座要求 */
+function applyConsRequirement(act, value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n === 0 || Math.abs(n) > CONS_MAX) {
+    act.consMode = 'none';
+    act.consTarget = 0;
+    act.consEnabled = false;
+    act.consRequirement = 0;
+    return;
+  }
+  act.consTarget = Math.abs(n);
+  act.consMode = n > 0 ? 'open' : 'close';
+  // 「启用 / 停用」要靠 expression 里的布尔值还原（导入 / 读草稿时由调用方再写一次）。
+  // 这里先给一个「不改变表达式」的缺省值：这样单独改模式 / 命座数时表达式不会被悄悄翻面。
+  act.consEnabled = consEnabledFromExpr(act.consMode, true);
+  act.consRequirement = consRequirementOf(act);
+}
+/** 设置这条动作在目标命座之上是启用（true）还是停用（false） */
+function setConsEnabled(act, want) { act.consEnabled = !!want; }
+/** 命座要求的中文说明（模式 + 目标命座数 + 启用/停用） */
+function consDescribe(act) {
+  if (!consHasRequirement(act)) return '无命座要求';
+  const x = Number(act.consTarget);
+  const on = wantConsValue(act);
+  return `达到 ${x} 命${act.consMode === 'close' ? '关闭' : '开启'}：${x} 命及以上${on ? '启用' : '停用'}，${x - 1} 命及以下${on ? '停用' : '启用'}`;
+}
+
+/* ---- 高命座手法的勾选联动 ----
+ * 「按达到x命设置动作启用/停用」的勾选状态遵循「有高命必有低命，没有低命必没有高命」：
+ *   勾选某个目标命座 x → 目标命座不高于 x 的同类一起勾上；
+ *   取消勾选某个目标命座 x → 目标命座不低于 x 的同类一起取消。
+ *
+ * 例：A、B 选「达到命座开启」，C、D 选「达到命座关闭」；A、C 是三命，B 是一命，D 是六命。
+ * 勾选 A（三命）→ B（一命，≤3）与 C（三命，≤3）一起勾上，D（六命，>3）不动；
+ * 取消勾选 A → C（三命，≥3）一起取消，B（一命，<3）不动。
+ * 于是「已勾选的目标命座集合」恒为向下闭合的 {1..k}，
+ * 它正好等价于「这个角色当前按几命来设置动作开关」。
+ */
+
+/** 这条动作「按达到x命设置动作启用/停用」当前是否勾选 */
+function consActiveState(act) {
+  return consHasRequirement(act) && !!act.consEnabled;
+}
+
+/**
+ * 用户勾选 / 取消勾选某条动作的「按达到x命设置动作启用/停用」之后，按联动规则同步同一角色的其他动作。
+ * 返回被改动过的动作数组（含传入的那条）。
+ */
+function syncConsEnabled(act, checked) {
+  if (!consHasRequirement(act)) return [];
+  const x = Number(act.consTarget);
+  const changed = [];
+  if (!!act.consEnabled !== !!checked) { act.consEnabled = !!checked; changed.push(act); }
+  for (const o of state.strategy.actions) {
+    if (o.id === act.id) continue;
+    if (String(o.character || '') !== String(act.character || '')) continue;
+    if (!consHasRequirement(o)) continue;
+    const y = Number(o.consTarget);
+    // 勾选：目标命座不高于 x 的一起勾上；取消勾选：目标命座不低于 x 的一起取消。
+    // 注意这里只能用 true / false 判断，不要把 null 当「不处理」的哨兵：
+    // `false === null` 是 false，会把「要取消勾选」误判成「照常处理」。
+    if (checked) {
+      if (o.consEnabled) continue;
+      if (y > x) continue;
+      o.consEnabled = true;
+    } else {
+      if (!o.consEnabled) continue;
+      if (y < x) continue;
+      o.consEnabled = false;
+    }
+    changed.push(o);
+  }
+  return changed;
+}
+
+/** 某个角色「有命座要求的动作」用到的全部目标命座数（升序去重） */
+function consTargetsFor(actions, character) {
+  const set = new Set();
+  for (const a of (actions || [])) {
+    if (String(a.character || '') !== String(character || '')) continue;
+    if (!consHasRequirement(a)) continue;
+    set.add(Number(a.consTarget));
+  }
+  return [...set].sort((p, q) => p - q);
+}
+
+/**
+ * 把某角色「要达到几命」设置成 k（0 = 不启用任何高命手法）：
+ * 目标命座不高于 k 的动作启用（勾选），高于 k 的停用（取消勾选）。
+ */
+function applyConsLevel(actions, character, k) {
+  const level = Number(k) || 0;
+  const changed = [];
+  for (const a of (actions || [])) {
+    if (String(a.character || '') !== String(character || '')) continue;
+    if (!consHasRequirement(a)) continue;
+    const want = Number(a.consTarget) <= level;
+    if (!!a.consEnabled === want) continue;
+    a.consEnabled = want;
+    changed.push(a);
+  }
+  return changed;
+}
+
+/**
+ * 把某角色的勾选状态规整成「向下闭合」的一致状态：
+ * 若最大的已勾选目标命座是 k，则 ≤k 的目标命座一律勾上、>k 的一律取消。
+ * 导入 / 载入草稿时用它兜住「expression 里的布尔值与 consRequirement 换算出的
+ * 勾选状态在同一个角色内互相矛盾」的情况（冲突时按「同命座有一个选了就都统一勾上，
+ * 低命座没勾选高命座也取消勾选」处理）。返回被改动过的动作数组。
+ */
+function normalizeConsChecks(actions, character) {
+  const list = (actions || []).filter(a => String(a.character || '') === String(character || '') && consHasRequirement(a));
+  if (!list.length) return [];
+  const targets = [...new Set(list.map(a => Number(a.consTarget)))].sort((p, q) => p - q);
+  let level = 0;
+  for (const t of targets) {
+    const any = list.some(a => Number(a.consTarget) === t && !!a.consEnabled);
+    if (any) level = t;
+  }
+  const changed = [];
+  for (const a of list) {
+    const want = Number(a.consTarget) <= level;
+    if (!!a.consEnabled === want) continue;
+    a.consEnabled = want;
+    changed.push(a);
+  }
+  return changed;
+}
+
+/** 对全部角色做一次勾选状态规整（导入 / 载入草稿之后调用） */
+function normalizeAllConsChecks(actions) {
+  const chars = new Set((actions || []).map(a => String(a.character || '')));
+  const changed = [];
+  for (const ch of chars) changed.push(...normalizeConsChecks(actions, ch));
+  return changed;
+}
+
+/** 需要出现在「快捷开关高命座手法」弹窗里的角色（有动作设置了命座要求的角色） */
+function consCharacters(actions) {
+  const out = [];
+  const seen = new Set();
+  for (const a of (actions || [])) {
+    if (!consHasRequirement(a)) continue;
+    const ch = String(a.character || '');
+    if (seen.has(ch)) continue;
+    seen.add(ch);
+    out.push(ch);
+  }
+  return out;
+}
 
 /* ---------------- 角色表 ---------------- */
 
@@ -2327,7 +3610,7 @@ function parseIndex(index) {
   // 动作类型 0（战斗检查与标记）只用于「当前角色」，编号只剩尾数 1 位：index = 1~9
   // （它的首位数字同时也是尾数，因此无法与「类型 9」区分；按规则约定 10 以下一律视为类型 0）
   if (index < 10) {
-    if (index < 1) return { ok: false, type: 0, reason: `动作类型 0 的 index 只能是 1~${MAX_SLOT}（战斗检查与标记只用于「当前角色」）` };
+    if (index < 1) return { ok: false, type: 0, reason: `动作类型 0 的 index 只能是 1~${MAX_SLOT}（战斗检查与标记只用于「当前角色」；9 个槽位都满时编辑器会临时多给一个尾数 ${MAX_SLOT_TYPE0}，此时需要「按规则重排编号」）` };
     return { ok: true, type: 0, code: 0, seq: 0, slot: index };
   }
   if (index < 10000) {
@@ -2383,7 +3666,20 @@ function createAction(opts = {}) {
     // tags：专用于保存用户对该动作节点的注释。BetterGI 的动作节点里没有这个属性，
     // 但 Newtonsoft.Json 默认忽略未知属性（MissingMemberHandling.Ignore），所以可以安全地用它存注释。
     tags: opts.tags ?? '',
+    // 命座要求（consRequirement）：见文件上方 consRequirement 的说明。
+    // 界面上编辑的是「模式 + 目标命座数 + 启用/停用」三元组，consRequirement 由它换算出来。
+    consMode: opts.consMode ?? 'none',
+    consTarget: Number.isInteger(opts.consTarget) ? opts.consTarget : 0,
+    consEnabled: !!opts.consEnabled,
+    consRequirement: 0,
   };
+  // 调用方可以直接给 consRequirement 数值，也可以给「模式 + 目标命座数 + 勾选」三元组；
+  // 给了数值就以数值为准（导入时走这条路），否则由三元组换算。
+  if (Number.isInteger(opts.consRequirement) && opts.consRequirement !== 0) {
+    applyConsRequirement(a, opts.consRequirement);
+  } else {
+    a.consRequirement = consRequirementOf(a);
+  }
   return a;
 }
 
@@ -2476,7 +3772,7 @@ function slotTaken(actions, character, type, slot, exceptId) {
   return actions.some(a => (a.character || '') === (character || '') && a.type === type && a.slot === slot && a.id !== exceptId);
 }
 function nextFreeSlot(actions, character, type, exceptId) {
-  for (let s = 1; s <= MAX_SLOT; s++) if (!slotTaken(actions, character, type, s, exceptId)) return s;
+  for (let s = 1; s <= maxSlotOfType(type); s++) if (!slotTaken(actions, character, type, s, exceptId)) return s;
   return 0;
 }
 function countOfType(actions, character, type) {
@@ -2506,14 +3802,14 @@ function allocateSlot(actions, character, type, exceptId) {
 function addAction(character, type, opts = {}) {
   const actions = state.strategy.actions;
   if (type === 0 && character) return { ok: false, error: '动作类型 0（战斗检查与标记）只能添加到「当前角色」下' };
-  if (countOfType(actions, character, type) >= MAX_SLOT) {
+  if (countOfType(actions, character, type) >= capacityOfType(type)) {
     return {
       ok: false,
-      error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作已达上限 ${MAX_SLOT} 条，无法继续新增。请删除该类型下的某条动作，或把某条动作改成别的动作类型。`
+      error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作已达上限 ${capacityOfType(type)} 条，无法继续新增。请删除该类型下的某条动作，或把某条动作改成别的动作类型。`
     };
   }
   const slot = allocateSlot(actions, character, type);
-  if (!slot) return { ok: false, error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作序号 1~${MAX_SLOT} 已全部被占用` };
+  if (!slot) return { ok: false, error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作序号 1~${capacityOfType(type)} 已全部被占用` };
   const act = createAction({ ...opts, type, character });
   act.slot = slot;
   recomputeIndexes([act]);
@@ -2537,14 +3833,14 @@ function changeActionType(id, newType) {
   if (newType === 0 && act.character) {
     return { ok: false, error: '动作类型 0（战斗检查与标记）只能用于「当前角色」。请先把该动作的角色改为「当前角色」。' };
   }
-  if (countOfType(actions, act.character, newType) >= MAX_SLOT) {
+  if (countOfType(actions, act.character, newType) >= capacityOfType(newType)) {
     return {
       ok: false,
-      error: `「${act.character || '当前角色'}」的「${actionTypeName(newType)}」动作已达上限 ${MAX_SLOT} 条，无法转入。请先删除该类型下的某条动作，或改用其他动作类型。`
+      error: `「${act.character || '当前角色'}」的「${actionTypeName(newType)}」动作已达上限 ${capacityOfType(newType)} 条，无法转入。请先删除该类型下的某条动作，或改用其他动作类型。`
     };
   }
   const slot = allocateSlot(actions, act.character, newType);
-  if (!slot) return { ok: false, error: `「${actionTypeName(newType)}」的序号 1~${MAX_SLOT} 已全部被占用，无法转入` };
+  if (!slot) return { ok: false, error: `「${actionTypeName(newType)}」的序号 1~${capacityOfType(newType)} 已全部被占用，无法转入` };
   act.type = newType;
   act.slot = slot;
   act.manualIndex = false;
@@ -2843,8 +4139,12 @@ function findUnpairedKeydowns(parts) {
   return order.filter(k => held.has(k)).map(k => ({ key: k, raw: held.get(k), released: released.has(k) }));
 }
 
-/** 解析整条指令串 */
-function parseActionString(str) {
+/** 解析整条指令串。
+ *  opts: { skipEmptyWarning: true } = 不报「指令串为空」的警告。
+ *  校验器用它来处理「当前角色 + 动作类型 0（战斗检查与标记）」这一种情况：
+ *  那种动作可以只写触发条件、不写任何指令（指令串与触发条件**同时**为空才提示）。 */
+function parseActionString(str, opts) {
+  const o = opts || {};
   const tokens = splitCommandString(str || '');
   const parts = tokens.map(t => parseCommand(t));
   const errors = [];
@@ -2857,8 +4157,20 @@ function parseActionString(str) {
   for (const u of findUnpairedKeydowns(parts)) {
     warnings.push(`指令「${u.raw}」按下了按键「${u.key}」，但整条指令串里没有对同一个按键的 keyup（${u.released ? '它只在松开别的按键时被顺带松开过' : '这条指令串里根本没出现松开它的指令'}）：这个按键可能会被一直按住，导致后续按键/普攻等操作失灵。请补一条 keyup(${u.key})，或改用「长按后松开按键」这类成对的写法`);
   }
-  if (parts.length === 0) warnings.push('指令串为空：该动作执行时不会有任何操作');
+  if (parts.length === 0 && !o.skipEmptyWarning) warnings.push('指令串为空：该动作执行时不会有任何操作');
   return { parts, errors, warnings };
+}
+
+/**
+ * 「当前角色 + 动作类型 0（战斗检查与标记）」的空指令特例。
+ * 这类动作常被用来“只做一次判定/标记”（条件成立就按优先级顺序往下走），
+ * 可以只写触发条件、不写任何指令，所以这时不提示「指令串为空」；
+ * 只有指令串与触发条件**同时**为空（既没内容也没条件，纯占位）才提示。
+ */
+function isMarkerOnlyAction(a) {
+  if (!a || a.type !== 0 || a.character) return false;
+  if (String(a.action || '').trim() !== '') return false;
+  return String(a.conditionText || '').trim() !== '';
 }
 
 function tokenHasRound(parts) {
@@ -3082,20 +4394,33 @@ function teammateExpr(act, actions) {
   return `${inc ? includeOperand(inc) : '(true)'} && ${excPart} && (true) && (${autoRaw})`;
 }
 
-/** 组装最终 condition.expression */
+/** 组装最终 condition.expression
+ *  无命座要求： 触发条件 或 (触发条件) && (队友条件)（原来的写法，一个字都不改）；
+ *  有命座要求： ((触发条件) && (命座要求)) && (队友条件)，队友条件为空时是 (触发条件) && (命座要求)。
+ *  「命座要求」只是一个布尔值字面量（true / false），见 consExprText。
+ */
 function buildExpression(act, actions) {
   const own = (act.conditionText || '').trim();
   const tm = teammateExpr(act, actions);
-  if (!tm) return own;
-  return `(${own || 'true'}) && ${wrapOperand(tm)}`;
+  const cons = consExprText(act);
+  if (!cons) return tm ? `(${own || 'true'}) && ${wrapOperand(tm)}` : own;
+  const base = `(${own || 'true'}) && (${cons})`;
+  return tm ? `(${base}) && ${wrapOperand(tm)}` : base;
 }
 
-/** morePriorities 最终条目 */
+/** morePriorities 最终条目（与 buildExpression 同一套组装规则，「触发条件」换成该条目自己的条件） */
 function buildMorePriorities(act, actions) {
   const tm = teammateExpr(act, actions);
+  const cons = consExprText(act);
   return (act.morePriorities || []).map(mp => {
     const own = (mp.text || '').trim();
-    const expression = tm ? `(${own || 'true'}) && ${wrapOperand(tm)}` : own;
+    // 没有命座要求时保持原状：没有队友条件就写这条条目自己的条件（空 = 空，恒真）
+    if (!cons) {
+      const expression = tm ? `(${own || 'true'}) && ${wrapOperand(tm)}` : own;
+      return { expression, priority: mp.priority, cmp: mp.cmp, scope: mp.scope, text: own };
+    }
+    const base = `(${own || 'true'}) && (${cons})`;
+    const expression = tm ? `(${base}) && ${wrapOperand(tm)}` : base;
     return { expression, priority: mp.priority, cmp: mp.cmp, scope: mp.scope, text: own };
   });
 }
@@ -3325,13 +4650,54 @@ function excludeChainFromNegation(innerText, wholeGroup) {
 }
 
 /**
+ * 「命座要求」在 expression 末尾的形态：`… && (true)` / `… && (false)`。
+ * 返回 { text: 剥掉之后剩下的算式, value: true|false|null }。
+ *
+ * 只在**不可能有队友条件**的调用点使用（有队友条件时命座要求排在队友条件前面，
+ * 由 splitTriggerAndTeammate 从顶层 && 链上取）。
+ * 这里带一个「整体已经被一层括号包住」的保护：
+ *   · 本编辑器导出的「有命座要求 + 有队友条件」形如 `((触发条件) && (命座要求)) && (队友条件)`，
+ *     整条不是 fullyWrapped，末尾的 `&& (…队友条件…)` 也不是布尔字面量，所以不会被误剥；
+ *   · 用户自己写的 `(true) && (in-party(甲))` 同样不是 fullyWrapped，也不会被误剥；
+ *   · 只有 `((触发条件) && (命座要求))`（有命座要求、没有队友条件的那一种）是 fullyWrapped，
+ *     这时才按末尾的布尔字面量剥出命座要求。
+ */
+function splitTrailingCons(text) {
+  const t = String(text === null || text === undefined ? '' : text);
+  // 整体被一对外层括号完整包住时（手写 / 旧数据的 `((触发条件) && (命座要求))`），先在里层找一次
+  const inner = fullyWrapped(t) ? t.trim().slice(1, -1) : t;
+  const m = inner.match(/^(.*?)\s*&&\s*\(\s*(true|false)\s*\)\s*$/);
+  if (!m || !m[1].trim()) return { text: t, value: null, wrapped: false };
+  // 剥掉命座要求之后剩下的那段触发条件：本编辑器导出时会把它整体包一层括号
+  // （`(触发条件) && (命座要求)`），这里要把这层括号去掉，否则每往返一次就多一层括号。
+  // 剩下的如果正好是恒真占位 `true`，按「空条件」还原（空 = 恒真，与输入框留空等价）。
+  let body = unwrapWholeText(m[1]);
+  if (body === 'true') body = '';
+  return { text: body, value: m[2] === 'true', wrapped: true };
+}
+
+/** 去掉「完整包住整段」的括号（一层层剥：`((a) && (b))` → `(a) && (b)`、`(a || b)` → `a || b`） */
+function unwrapWholeText(text) {
+  let t = String(text === null || text === undefined ? '' : text).trim();
+  while (fullyWrapped(t)) t = t.slice(1, -1).trim();
+  return t;
+}
+
+/**
  * 把一条 expression 拆成 { trigger, teammate }
  * teammate 为 null 表示没有队友条件；teammate.ok=false 表示看起来有队友条件但拆不出来（此时 trigger 保留原文）
+ *
+ * 命座要求（consRequirement）那一段是组装时在最外层补的 `&& (true/false)`：
+ *   · 有队友条件时，它在队友条件**里面**（`((触发条件) && (命座要求)) && (队友条件)`），
+ *     按原来的规则拆完队友条件之后，末尾剩下的那个布尔字面量就是它；
+ *   · 没有队友条件时它在末尾（`(触发条件) && (命座要求)`），用 splitTrailingCons 剥掉。
+ * 只在「确实剥掉了队友条件」或「末尾确实跟着 `&& (布尔字面量)`」时才认它，
+ * 免得把 `(true) && (队友条件)` 里的恒真占位误认成命座要求。
  */
 function splitTriggerAndTeammate(text, actionNames) {
   const raw = String(text === null || text === undefined ? '' : text);
   const parsed = condParse(raw, actionNames || []);
-  if (parsed.error || !parsed.ast) return { trigger: raw, teammate: null };
+  if (parsed.error || !parsed.ast) return { trigger: raw, teammate: null, cons: null };
   const ops = flattenAndOperands(parsed.ast);
   // 定位「队友条件」段的起点：
   //   · 从第一个含 in-party 的操作数开始，再把前面紧邻的恒真占位一起收进来
@@ -3341,18 +4707,31 @@ function splitTriggerAndTeammate(text, actionNames) {
   const atInParty = ops.findIndex(condContainsInParty);
   const atEmptyExclude = ops.findIndex((n) => !condBoolPlaceholder(n, true) && isTeammateLeadingPlaceholder(n));
   const at = atInParty >= 0 ? (atEmptyExclude >= 0 ? Math.min(atInParty, atEmptyExclude) : atInParty) : atEmptyExclude;
-  if (at < 0) return { trigger: raw, teammate: null };
+  if (at < 0) {
+    // 没有队友条件：末尾可能跟着「命座要求」那一段（`(触发条件) && (命座要求)`，
+    // 手写 / 旧数据里也可能是整体再包一层的 `((触发条件) && (命座要求))`）。
+    // 两种情况都由 splitTrailingCons 处理：它会剥掉命座要求，并把触发条件那层括号去掉。
+    const stripped = splitTrailingCons(raw);
+    if (stripped.value === null || stripped.text === raw) return { trigger: raw, teammate: null, cons: null };
+    return { trigger: stripped.text, teammate: null, cons: stripped.value };
+  }
   let tmStart = at;
   while (tmStart > 0 && isTeammateLeadingPlaceholder(ops[tmStart - 1])) tmStart--;
   const head = ops.slice(0, tmStart);
-  // 触发条件末尾的 true 占位（来自「(true) && (队友条件)」）不算内容
+  // 触发条件末尾的 true 占位（来自「(true) && (队友条件)」）与「命座要求」那一段都排在队友条件前面，
+  // 这里从后往前收：先认出末尾的布尔字面量当命座要求，再把紧邻的 true 占位去掉。
+  let cons = null;
+  if (head.length && head[head.length - 1].type === 'bool') {
+    cons = !!head[head.length - 1].value;
+    head.pop();
+  }
   while (head.length && head[head.length - 1].type === 'bool' && head[head.length - 1].value === true) head.pop();
   // 用 && 重新连接时要给 || 片段整体加括号，否则会改变运算顺序（只有一个操作数时不用加）
   const asAnd = (list) => list.map(n => (list.length > 1 && n.type === 'binary' && (n.op === '&&' || n.op === '||') ? `(${condToText(n)})` : condToText(n))).join(' && ');
   const trigger = head.length ? asAnd(head) : '';
   const r = decomposeTeammate(ops.slice(at));
-  if (!r.ok) return { trigger: raw, teammate: r };   // 拆不出来就整条按触发条件处理
-  return { trigger, teammate: r, teammateText: asAnd(ops.slice(tmStart)) };
+  if (!r.ok) return { trigger: raw, teammate: r, cons: null };   // 拆不出来就整条按触发条件处理
+  return { trigger, teammate: r, teammateText: asAnd(ops.slice(tmStart)), cons };
 }
 
 /** 运算符数组补齐到指定长度 */
@@ -3466,7 +4845,9 @@ function validateStrategy() {
     else indexSeen.set(a.index, a.name || '(未命名)');
 
     // 指令
-    const parsed = parseActionString(a.action);
+    // 「当前角色 + 动作类型 0」只写了触发条件、没写指令时不提示「指令串为空」：
+    // 这种“只做判定/标记”的动作是正常用法，两处同时为空才提示（见 isMarkerOnlyAction）。
+    const parsed = parseActionString(a.action, { skipEmptyWarning: isMarkerOnlyAction(a) });
     for (const e of parsed.errors) push(errors, `${where}：${e}`, a.id);
     for (const w of parsed.warnings) push(warnings, `${where}：${w}`, a.id);
     const fs = firstSwitchInfo(parsed.parts);
@@ -3485,6 +4866,17 @@ function validateStrategy() {
 
     // 注释（tags）：本编辑器约定的注释字段，BetterGI 会忽略它；空注释在导出时省略该字段
     if (a.tags !== undefined && a.tags !== null && typeof a.tags !== 'string') push(errors, `${where}：注释必须是字符串（写入 tags 字段）`, a.id);
+
+    // 命座要求（consRequirement）：本编辑器约定的字段，BetterGI 会忽略它；
+    // 没有命座要求（0）时导出会省略该字段。
+    if (!CONS_MODES.includes(a.consMode)) {
+      push(errors, `${where}：命座要求的模式无法识别（${a.consMode}）`, a.id);
+    } else if (a.consMode === 'none') {
+      const need = Number(a.consTarget) > 0;
+      if (need) push(errors, `${where}：命座要求的状态不一致（模式为「无命座要求」却带着目标命座数），请重新选择「命座要求」`, a.id);
+    } else if (!(Number.isInteger(Number(a.consTarget)) && Number(a.consTarget) >= 1 && Number(a.consTarget) <= CONS_MAX)) {
+      push(errors, `${where}：命座要求的目标命座数必须是 1~${CONS_MAX} 的整数`, a.id);
+    }
 
     // 条件
     const cv = condValidate(a.conditionText, { actionNames: names, knownIndexes: idxSet, currentAction: a });
@@ -3532,9 +4924,10 @@ function validateStrategy() {
     groups.set(k, (groups.get(k) || 0) + 1);
   }
   for (const [k, c] of groups) {
-    if (c > MAX_SLOT) {
-      const [ch, t] = k.split('|');
-      push(errors, `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${MAX_SLOT} 条`, null);
+    const [ch, t] = k.split('|');
+    const cap = capacityOfType(Number(t));
+    if (c > cap) {
+      push(errors, `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${cap} 条`, null);
     }
   }
 
@@ -3578,8 +4971,8 @@ function planRenumber() {
     const [character, typeStr] = key.split('|');
     const type = Number(typeStr);
     list.sort((x, y) => (x.a.index - y.a.index) || (x.i - y.i));
-    if (list.length > MAX_SLOT) {
-      return { error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作有 ${list.length} 条，超过上限 ${MAX_SLOT} 条，无法自动编号。请先删除或改类型。` };
+    if (list.length > capacityOfType(type)) {
+      return { error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作有 ${list.length} 条，超过上限 ${capacityOfType(type)} 条，无法自动编号。请先删除或改类型。` };
     }
     const av = character ? getAvatar(character) : { code: 0, seq: 0 };
     if (character && !av) return { error: `角色「${character}」不在角色表中，无法自动编号。` };
@@ -3694,6 +5087,9 @@ function buildJson() {
       index: a.index,
     };
     if (tags.trim()) o.tags = tags;
+    // 命座要求：0（无命座要求）时不写这个字段（写进去没有任何作用）
+    const consReq = consRequirementOf(a);
+    if (consReq) o.consRequirement = consReq;
     if (mps.length) o.morePriorities = mps.map(m => ({ expression: m.expression, priority: m.priority }));
     return o;
   });
@@ -3759,7 +5155,7 @@ function inferActionType(actionStr, name, ensureCast) {
 
 /** 动作节点里本编辑器认得的字段（比较时忽略大小写，因为 BetterGI 用的 Newtonsoft.Json 大小写不敏感）。
  *  其余字段一律忽略，但会在导入弹窗里提醒（见 unknownFields）。 */
-const KNOWN_ACTION_KEYS = new Set(['name', 'character', 'action', 'condition', 'index', 'ensurecast', 'morepriorities', 'tags']);
+const KNOWN_ACTION_KEYS = new Set(['name', 'character', 'action', 'condition', 'index', 'ensurecast', 'morepriorities', 'tags', 'consrequirement']);
 
 function analyzeImport(obj) {
   const problems = [];
@@ -3786,6 +5182,13 @@ function analyzeImport(obj) {
     // 比较时忽略大小写：BetterGI 用的 Newtonsoft.Json 大小写不敏感，写 Tags / TAGS 也能被识别。
     const tagKey = Object.keys(raw).find(k => String(k).toLowerCase() === 'tags');
     a.tags = tagKey !== undefined && typeof raw[tagKey] === 'string' ? raw[tagKey] : '';
+    // consRequirement：本编辑器约定用来保存「命座要求」（见文件上方说明）。
+    // 同样忽略大小写；值必须是 -6~-1 / 1~6 的整数，0 或缺失 = 无命座要求，
+    // 其它取值按 0 处理（BetterGI 本来就忽略这个字段，导入时不该因为写错值而报错）。
+    const consKey = Object.keys(raw).find(k => String(k).toLowerCase() === 'consrequirement');
+    const consRaw = consKey === undefined ? undefined : raw[consKey];
+    a.consRequirement = (Number.isInteger(consRaw) && consRaw !== 0 && Math.abs(consRaw) <= CONS_MAX) ? consRaw : 0;
+    applyConsRequirement(a, a.consRequirement);
     // 多余字段（例如正式版 BGI 里不存在的 redArrowAim）：BetterGI 会静默忽略，本编辑器也忽略，
     // 但要在导入弹窗里列出来提醒用户（否则用户会以为这些内容被保存了）。
     for (const k of Object.keys(raw)) {
@@ -3951,6 +5354,43 @@ function analyzeImport(obj) {
         if (e.loc === 'cond') a.conditionText = e.trigger;
         else if (a.morePriorities[e.idx]) a.morePriorities[e.idx].text = e.trigger;
       }
+      // 没有队友条件的那几条也要把「命座要求」剥掉（否则 expression 会整条变成触发条件）
+      for (const e of a.__split) {
+        if (e.teammate) continue;
+        if (e.loc === 'cond') a.conditionText = e.trigger;
+        else if (a.morePriorities[e.idx]) a.morePriorities[e.idx].text = e.trigger;
+      }
+      // ---- 命座要求（consRequirement） ----
+      // 布尔值来自各条 expression 末尾/中间的命座要求段；一条都没认出来时按 true 处理
+      // （没有那一句 `&& (false)` 就说明这条动作在对应命座下是启用的）。
+      const consVals = a.__split.filter(e => e.cons !== undefined && e.cons !== null).map(e => e.cons);
+      if (consHasRequirement(a)) {
+        // 同一个动作的各条 expression 理论上应当一致；不一致时以主条件（没有则第一条）为准，
+        // 并给出提示（导出时所有 expression 都会按这个选择重写）。
+        const want = consVals.length ? consVals[0] : true;
+        if (consVals.some(v => v !== want)) {
+          problems.push({
+            kind: 'cons-mismatch',
+            actionId: a.id,
+            text: `${label}：主条件与其他触发条件的「命座要求」布尔值不一致，已按${
+              a.__split.find(e => e.cons !== undefined && e.cons !== null && e.loc === 'cond') ? '主条件' : '第一条其他触发条件'
+            }导入；导出时各条 expression 的命座要求都会写成同一个值。`,
+          });
+        }
+        // 三个信息分别来自两个地方（见文件上方的说明，合起来一一对应）：
+        //   · consRequirement 的**符号** → 模式（正 = 达到命座开启、负 = 达到命座关闭）；
+        //   · expression 里那一段布尔字面量 → 「启用 / 停用」；
+        //   · 勾选状态 = （模式是「开启」）=== 那个布尔值。
+        // 这样「达到命座开启 + 不勾选」与「达到命座关闭 + 勾选」虽然数值相同，也能各自原样还原，
+        // 不会出现「本来没勾上的，导入后变成勾上」。
+        const exprVal = consVals.length ? consVals[0] : true;
+        a.consEnabled = consEnabledFromExpr(a.consMode, exprVal);
+        a.consRequirement = consRequirementOf(a);
+      } else {
+        // 没有可用的 consRequirement 数值（0 / 缺失 / 超范围）：只按布尔值没法确定模式与命座数，
+        // 这时丢弃命座要求那一段（触发条件已经剥出来了，不会丢内容）。
+        a.consMode = 'none'; a.consTarget = 0; a.consEnabled = false; a.consRequirement = 0;
+      }
       if (bad.length) {
         const where = bad.map(e => (e.loc === 'cond' ? '主条件' : `其他触发条件 #${e.idx + 1}`)).join('、');
         problems.push({
@@ -4034,6 +5474,16 @@ function analyzeImport(obj) {
         a.teammates.autoExcludeSameType = withInc.every(covered);
       }
     }
+    // 队友那块没有出现在 expression 里的动作（一个 in-party 都没有：必要队友、排除队友、自动排除全空）：
+    // 上面那条还原规则同样适用，否则这个勾选会在往返之后从「勾上」掉成「不勾」。
+    // 这类动作的排除条件为空，所以「同类其他动作里凡设置了必要队友的都已被覆盖」等价于
+    // 「同类其他动作里根本没有设置必要队友的」。
+    for (const a of actions) {
+      if (a.__tmParse) continue;
+      const others = actions.filter(o => o.id !== a.id && (o.character || '') === (a.character || ''));
+      const withInc = others.filter(o => o.type === a.type && includeExprOf(o.teammates));
+      a.teammates.autoExcludeSameType = withInc.length === 0;
+    }
     for (const a of actions) { delete a.__split; delete a.__tmParse; }
   }
 
@@ -4105,9 +5555,10 @@ function analyzeImport(obj) {
   const cnt = new Map();
   for (const a of actions) { const k = `${a.character || ''}|${a.type}`; cnt.set(k, (cnt.get(k) || 0) + 1); }
   for (const [k, c] of cnt) {
-    if (c > MAX_SLOT) {
+    const cap = capacityOfType(Number(k.split('|')[1]));
+    if (c > cap) {
       const [ch, t] = k.split('|');
-      problems.push({ kind: 'capacity', text: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${MAX_SLOT} 条，需要删除或改类型后才能导入` });
+      problems.push({ kind: 'capacity', text: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${cap} 条，需要删除或改类型后才能导入` });
     }
   }
 
@@ -4180,6 +5631,9 @@ function applyImport(result, opts) {
   }
   state.strategy.actions = actions;
   if (o.fixPriorityTail) fixPriorityTails(result.problems);
+  // 命座要求的勾选状态在同一个角色内必须自洽（有高命必有低命）；
+  // 导入的策略里万一出现矛盾（手写 / 改过 expression），这里统一按规则规整一次。
+  normalizeAllConsChecks(actions);
   // 导入的动作默认按 index 升序排布
   state.strategy.actions.sort((x, y) => x.index - y.index);
 }
@@ -4364,6 +5818,12 @@ function mergeActionDiffs(src, cur, srcActions, curActions) {
   if (String(src.character || '') !== String(cur.character || '')) add('character', '角色', cur.character || '(当前角色)', src.character || '(当前角色)');
   if (String(src.action || '') !== String(cur.action || '')) add('action', '动作指令', cur.action || '(空)', src.action || '(空)');
   if (!!src.ensureCast !== !!cur.ensureCast) add('ensureCast', '确保E技能释放成功（ensureCast）', cur.ensureCast ? '已勾选' : '未勾选', src.ensureCast ? '已勾选' : '未勾选');
+  const cr = consRequirementOf(cur), sr = consRequirementOf(src);
+  // 命座要求的「数值 + 勾选状态」要一起比：同一个数值（例如 -2）在「勾选」与「不勾选」下语义不同
+  // （前者 2 命及以上停用、后者 2 命及以上仍然启用），只比数值会把这两种情况当成相同。
+  if (cr !== sr || consActiveState(cur) !== consActiveState(src)) {
+    add('consRequirement', '命座要求（consRequirement）', consDescribe(cur), consDescribe(src));
+  }
   const cc = mergeCanonExpr(buildExpression(cur, curActions), curActions);
   const ic = mergeCanonExpr(buildExpression(src, srcActions), srcActions);
   if (cc !== ic) add('condition', '触发条件 / 队友条件（最终 expression）', cc || '(空 = 恒真)', ic || '(空 = 恒真)');
@@ -4418,6 +5878,13 @@ function applyMergedFields(dst, src, convertExpr) {
   dst.action = src.action || '';
   dst.ensureCast = !!src.ensureCast;
   dst.tags = src.tags || '';
+  // 命座要求（consRequirement）也属于动作内容，替换 / 合并时把三元组一起带过来
+  // （数值只带「模式 + 目标命座数」，勾选状态必须从被导入动作那边一起复制，否则会翻面）。
+  dst.consMode = CONS_MODES.includes(src.consMode) ? src.consMode : 'none';
+  dst.consTarget = Number.isInteger(src.consTarget) ? src.consTarget : 0;
+  dst.consEnabled = !!src.consEnabled;
+  if (!consHasRequirement(dst)) { dst.consMode = 'none'; dst.consTarget = 0; dst.consEnabled = false; }
+  dst.consRequirement = consRequirementOf(dst);
   dst.conditionText = convertExpr(src.conditionText);
   dst.conditionMode = src.conditionMode || 'all';
   dst.conditionCacheFor = null;
@@ -4492,10 +5959,12 @@ function applyMergePlan(plan, decisions) {
       groups.set(k, (groups.get(k) || 0) + 1);
     }
     for (const [k, c] of groups) {
-      if (c <= MAX_SLOT) continue;
+      const idx0 = k.lastIndexOf('|');
+      const t0 = Number(k.slice(idx0 + 1));
+      if (c <= capacityOfType(t0)) continue;
       const idx = k.lastIndexOf('|');
       const ch = k.slice(0, idx), t = k.slice(idx + 1);
-      return { ok: false, error: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作会变成 ${c} 条，超过上限 ${MAX_SLOT} 条。用导入版本替换会改变动作的角色，请先整理该角色 / 该类型的动作后再合并。` };
+      return { ok: false, error: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作会变成 ${c} 条，超过上限 ${capacityOfType(Number(t))} 条。用导入版本替换会改变动作的角色，请先整理该角色 / 该类型的动作后再合并。` };
     }
   }
 
@@ -4519,14 +5988,14 @@ function applyMergePlan(plan, decisions) {
     if (!av) return { ok: false, error: `动作「${it.src.name || '(未命名)'}」的角色「${character}」不在角色表中。` };
     let picked = null;
     for (const t of mergeTypeOrder(it.src.type)) {
-      if (work.filter(w => w.character === character && w.type === t).length < MAX_SLOT) { picked = t; break; }
+      if (work.filter(w => w.character === character && w.type === t).length < capacityOfType(t)) { picked = t; break; }
     }
     if (picked === null) {
       return { ok: false, error: `无法为被导入的动作「${it.src.name || '(未命名)'}」分配编号：「${character || '当前角色'}」的 9 种动作类型都已经各有 ${MAX_SLOT} 条动作了。请先删除或改类型后再合并。` };
     }
     const usedSlots = new Set(work.filter(w => w.character === character && w.type === picked).map(w => w.slot));
     let slot = 0;
-    for (let s = 1; s <= MAX_SLOT; s++) if (!usedSlots.has(s)) { slot = s; break; }
+    for (let s = 1; s <= capacityOfType(picked); s++) if (!usedSlots.has(s)) { slot = s; break; }
     const index = makeIndex(picked, av.code, av.seq, slot);
     const name = kinds[i] === 'rename'
       ? (String(it.src.name || '').trim() ? nextMergeName(it.src.name, allocNames) : nextMergeName('未命名', allocNames))
@@ -4637,6 +6106,10 @@ const LS_DRAFT = 'bgi_strategy_editor_drafts_v1';
 const LS_RARITY = 'bgi_strategy_editor_rarity_v1';
 const LS_UI = 'bgi_strategy_editor_ui_v1';
 const LS_RECENT = 'bgi_strategy_editor_recent_v1';
+/** 优先级预览页「模拟队伍过滤」里保存的队伍（只与本地有关，与战斗策略内容没有任何关联） */
+const LS_TEAMS = 'bgi_strategy_editor_teams_v1';
+/** 本地最多保存几支队伍（与原神里可保存的队伍数量一致） */
+const MAX_TEAMS = 20;
 
 /* ---------------- 全局状态 ---------------- */
 
@@ -4739,6 +6212,29 @@ function avatarLabel(name) {
   return `${elementDot(av.code)}${esc(av.name)}`;
 }
 
+/* ---------------- 角色搜索 ----------------
+ * 角色表里每个角色还带一组「搜索用的其它写法」（数据来自 BetterGI 的 combat_avatar.json）。
+ * 它们**只**参与搜索框的匹配，不参与编号、不写进草稿与导出的 JSON、
+ * 也不会出现在页面上的任何位置（界面上一律只显示标准名，命中与否都不作提示）。
+ */
+
+/** 命中该角色的「搜索用的其它写法」 */
+function avatarExtraHit(av, ql) {
+  if (!av || !ql) return false;
+  const list = Array.isArray(av.alias) ? av.alias : [];
+  for (const t of list) if (String(t).toLowerCase().includes(ql)) return true;
+  return false;
+}
+
+/** 标准名 / id（+ 搜索用的其它写法）是否命中：角色列表、角色选择弹窗、复制弹窗共用 */
+function avatarHitAll(av, ql) {
+  if (!av) return false;
+  if (!ql) return true;
+  if (String(av.name || '').toLowerCase().includes(ql)) return true;
+  if (String(av.id || '').includes(ql)) return true;
+  return avatarExtraHit(av, ql);
+}
+
 /* ---------------- 角色选择器 ---------------- */
 
 /**
@@ -4765,7 +6261,7 @@ function pickAvatarsLive(opts) {
     let lastCode = null;
     for (const av of AVATARS) {
       if (av.virtual && !o.allowCurrent) continue;
-      if (q && !(av.name.toLowerCase().includes(q) || (av.id || '').includes(q))) continue;
+      if (q && !avatarHitAll(av, q)) continue;
       if (elFilter !== 'all' && String(av.code) !== String(elFilter)) continue;
       const r = rarityOf(av.name);
       if (rarFilter !== 'all') { if (rarFilter === 'none') { if (r) continue; } else if (r !== rarFilter) continue; }
@@ -4855,6 +6351,70 @@ function pickAvatarsLive(opts) {
   return p.then(v => (v === 'ok' ? { names: o.allowDuplicates ? sel.slice() : uniq(sel), mode: orMode ? 'or' : 'and' } : null));
 }
 
+/* ---------------- 角色搜索框（搜索词只用来筛选旁边的角色下拉） ----------------
+ * 「战斗前动作列表」每一行的角色选择框、以及条件函数里「动作/角色入参」的角色筛选，
+ * 都要一个「输入角色名 → 旁边的角色下拉只剩匹配的角色」的搜索框。
+ *
+ * 这里**只用原生 <select>**：搜索框自己不再挂任何候选列表
+ * （以前的 <input list="..."> + <datalist> 会在输入框正下方弹出候选层，
+ *   既不是需求要的那个「旁边的角色选择框」，又会跟面板重建抢焦点），
+ * 所以本文件里不再有任何 datalist / showPicker 相关的代码。
+ */
+
+/**
+ * 「动作参数」选择器里角色筛选下拉的「当前角色」哨兵值。
+ * 「当前角色」在动作模型里的 character 是空字符串，而 <option value=""> 已经是「（全部角色）」，
+ * 两者共用空值会让「当前角色」既选不中、又表现成“选了但筛选没生效”（下拉会跳回「全部角色」）。
+ * 所以筛选下拉的选项值用这个哨兵值表示「当前角色」；判断时由 cfFilterAllowsChar 负责把它翻译回模型里的空字符串。
+ */
+const CF_CHAR_CURRENT = '__current__';
+
+/** 角色候选显示名（角色名 + 编号；「当前角色」用「角色名(空)」的写法） */
+function avatarOptLabel(name) {
+  if (!name) return '当前角色';
+  const av = getAvatar(name);
+  return av ? `${av.name}（${avatarCodeLabel(av)}）` : `${name}（不在角色表）`;
+}
+
+/** 角色的显示名或编号是否命中搜索词（空角色 = 「当前角色」）；
+ *  标准名 / 编号的判断与以前完全一致，另外再匹配该角色的「搜索用的其它写法」 */
+function avatarMatchesQuery(character, ql) {
+  const hay = character || '当前角色';
+  if (hay.toLowerCase().includes(ql)) return true;
+  const av = character ? getAvatar(character) : null;
+  if (!av) return false;
+  if (String(av.seq).padStart(2, '0').includes(ql) || avatarCodeLabel(av).toLowerCase().includes(ql)) return true;
+  return avatarExtraHit(av, ql);
+}
+
+/**
+ * 角色下拉的选项：搜索词只过滤这里。
+ * **当前选中的角色项永远保留**（即使它不匹配搜索词，也带一个「已选」提示）——
+ * 否则筛完以后下拉里没有匹配 value 的 option，浏览器会把 select.value 变成空串，
+ * 一旦这时发生「把界面内容写回模型」，原本选中的角色就会被悄悄清成「（不指定角色）」。
+ */
+function avatarFilterOptions(query, selected, opts) {
+  const o = Object.assign({ allLabel: '全部角色', allValue: '', keepAll: true }, opts || {});
+  const ql = String(query === undefined || query === null ? '' : query).trim().toLowerCase();
+  const pool = o.pool || AVATARS.filter(a => !a.virtual);
+  const isSelected = (name) => String(selected || '') === String(name || '');
+  const hit = (name) => !ql || avatarMatchesQuery(name, ql);
+  const rows = o.keepAll ? [`<option value="${attr(o.allValue)}" ${!selected ? 'selected' : ''}>${esc(o.allLabel)}</option>`] : [];
+  const used = new Set(['']);
+  for (const av of pool) {
+    if (used.has(av.name)) continue;
+    if (!hit(av.name) && !isSelected(av.name)) continue;
+    used.add(av.name);
+    const mark = (ql && !hit(av.name)) ? '（已选）' : '';
+    rows.push(`<option value="${attr(av.name)}" ${isSelected(av.name) ? 'selected' : ''}>${esc(avatarOptLabel(av.name))}${mark}</option>`);
+  }
+  // 当前选中的角色不在角色池里（例如「当前角色」哨兵值）：额外补一项，保证选择不会丢
+  if (selected && !used.has(String(selected))) {
+    rows.push(`<option value="${attr(selected)}" selected>${esc(String(selected) === CF_CHAR_CURRENT ? '当前角色' : avatarOptLabel(String(selected)))}（已选）</option>`);
+  }
+  return rows.join('');
+}
+
 /* ---------------- 按键选择器 ---------------- */
 
 const KB_ROWS = [
@@ -4931,7 +6491,7 @@ function openRarityEditor() {
     let last = null;
     const rows = [];
     for (const av of AVATARS) {
-      if (q && !av.name.includes(q)) continue;
+      if (q && !(av.name.includes(q) || avatarExtraHit(av, q.toLowerCase()))) continue;
       if (av.code !== last) { rows.push(`<div class="secgroup">${av.code === 0 ? '元素未定/当前角色' : elementLabel(av.code)}</div>`); last = av.code; }
       const r = rarityOf(av.name);
       rows.push(`<div class="roleitem">
@@ -5120,9 +6680,13 @@ function commandTokenTable(parts) {
 
 /* -------- 指令串校验反馈（手输指令时实时刷新，不重建面板） -------- */
 
-/** 指令串 → 校验反馈 HTML（错误 + 警告） */
-function commandFeedbackHtml(value) {
-  const p = parseActionString(value || '');
+/**
+ * 指令串 → 校验反馈 HTML（错误 + 警告）。
+ * skipEmptyWarning 由调用方按「当前角色 + 动作类型 0 只写触发条件、不写指令」的规则决定
+ * （见 core.js 的 isMarkerOnlyAction），这时不提示「指令串为空」。
+ */
+function commandFeedbackHtml(value, skipEmptyWarning) {
+  const p = parseActionString(value || '', { skipEmptyWarning: !!skipEmptyWarning });
   const m = 'margin-bottom:6px';
   return (p.errors.length ? `<div class="errbox" style="${m}">${p.errors.map(esc).join('<br>')}</div>` : '')
     + (p.warnings.length ? `<div class="warnbox" style="${m}">${p.warnings.map(esc).join('<br>')}</div>` : '');
@@ -5153,7 +6717,10 @@ function updateCommandFeedback(ref, value, mode) {
       const pa = state.strategy.info.preActions[i] || {};
       check.innerHTML = preCmdFeedbackHtml({ character: pa.character || '', cmd: value });
     } else {
-      check.innerHTML = commandFeedbackHtml(value);
+      // 角色动作：按「当前角色 + 动作类型 0 只写条件不写指令」的规则决定要不要提示指令串为空
+      const a = state.strategy.actions.find(x => x.id === String(ref).replace(/^act:/, ''));
+      const marker = !!a && isMarkerOnlyAction({ ...a, action: value });
+      check.innerHTML = commandFeedbackHtml(value, marker);
     }
   }
   const tokens = document.querySelector(`[data-cmdtokens="${key}"]`);
@@ -5374,13 +6941,16 @@ function commandEditorHtml(value, kind, actionId, opts) {
   const o = Object.assign({ rows: 3, label: '动作指令（action）', hint: '', qid: '' }, opts || {});
   const p = parseActionString(value || '');
   const id = o.qid || `${kind}:${actionId}`;
+  // 角色动作按「当前角色 + 动作类型 0 只写条件不写指令」的规则决定要不要提示指令串为空
+  const act = kind === 'act' ? state.strategy.actions.find(x => x.id === actionId) : null;
+  const marker = !!act && isMarkerOnlyAction({ ...act, action: value });
   return `
     <div class="hint" style="margin-bottom:4px">${esc(o.label)}</div>
     ${ctrl({ tag: 'textarea', kind, actionId, field: 'action', value: value || '', rows: o.rows, placeholder: '用半角逗号分隔，例如：q,wait(0.1),ready', extra: ` data-ref="${attr(id)}"` })}
     <div class="row" style="margin:6px 0">
       <span class="hint">${esc(o.hint || '必须以半角逗号分隔；不支持 | 与 round()；中文括号/逗号会报错')}</span>
     </div>
-    <div data-cmdcheck="${attr(id)}">${commandFeedbackHtml(value)}</div>
+    <div data-cmdcheck="${attr(id)}">${commandFeedbackHtml(value, marker)}</div>
     <details class="det sub" data-details="${attr(id)}:quick" ${detailOpen(`${id}:quick`, true) ? 'open' : ''}><summary>快捷插入指令</summary>
       ${renderQuickCommandPanel(id, { kind, actionId, index: actionId }, value)}
     </details>
@@ -5458,6 +7028,22 @@ function restoreCommandCaret(target, caret) {
 
 /* ---------------- 信息页渲染 ---------------- */
 
+/**
+ * 「战斗前动作列表」每一行角色搜索框里的内容。
+ * 只用于该行角色候选列表的过滤（选择框里始终保留全部角色），
+ * 所以放在 app 上而不是 state.ui 里：不会被 saveUi 落盘，重建面板后也能保留。
+ */
+function preSearches() {
+  if (!Array.isArray(app.preSearch)) app.preSearch = [];
+  return app.preSearch;
+}
+function setPreSearch(i, v) {
+  const list = preSearches();
+  const n = Number(i);
+  if (!Number.isInteger(n) || n < 0) return;
+  list[n] = String(v === undefined || v === null ? '' : v);
+}
+
 function renderInfoPanel() {
   const s = state.strategy;
   const pre = s.info.preActions || [];
@@ -5465,9 +7051,9 @@ function renderInfoPanel() {
   const infoErrors = v.errors.filter(x => !x.actionId);
   const infoWarns = v.warnings.filter(x => !x.actionId);
   const drafted = loadDrafts();
-  const pQuery = (state.ui.preAvatarSearch || '').trim().toLowerCase();
-  const preAvatars = AVATARS.filter(a => !a.virtual
-    && (!pQuery || a.name.toLowerCase().includes(pQuery) || String(a.id || '').includes(pQuery)));
+  // 每一行「战斗前动作」自己的角色搜索词：值跟着 DOM 走（不放进 state.ui，避免被 saveUi 落盘）
+  const searches = preSearches();
+  const prePool = AVATARS.filter(a => !a.virtual);
 
   $('paneInfo').innerHTML = `
     <div class="split">
@@ -5501,19 +7087,17 @@ function renderInfoPanel() {
         <div class="card">
           <h3>战斗前动作列表 <span class="hint">info.preActions：开战前按顺序执行一次</span></h3>
           <div class="hint mb">格式为 <span class="pill">角色名 指令串</span> 或只有 <span class="pill">指令串</span>（不写角色名时使用队伍第 1 名角色）。注意：BetterGI 按<b>第一个空格</b>切分角色名，所以指令串里不能有空格（要写 <span class="pill">walk(s,0.2)</span> 而不是 <span class="pill">walk(s, 0.2)</span>）。</div>
-          <div class="row mb">
-            <input data-kind="info" data-field="preAvatarSearch" data-focus="pre:search" value="${attr(state.ui.preAvatarSearch || '')}" placeholder="搜索角色名 / 编号" style="width:200px">
-            <span class="hint">筛选下面每个动作的角色下拉；留空显示全部 ${AVATARS.filter(a => !a.virtual).length} 个角色</span>
-          </div>
+          <div class="hint mb">每一个动作的角色下拉旁边都有自己的搜索框：在里面输入角色名 / 编号，旁边的<b>角色选择框</b>里就只剩匹配到的角色，从选择框里挑一个即可。</div>
           ${pre.length ? pre.map((pa, i) => {
             const qid = `pre:${i}`;
+            const q = searches[i] || '';
             return `<div class="card" style="background:var(--bg3);margin-bottom:8px;padding:8px 10px">
               <div class="row mb">
                 <span class="hint">#${i + 1}</span>
-                <select data-kind="pre" data-idx="${i}" data-field="character" style="width:150px">
-                  <option value="" ${pa.character ? '' : 'selected'}>（不指定角色）</option>
-                  ${preAvatars.map(a => `<option value="${attr(a.name)}" ${pa.character === a.name ? 'selected' : ''}>${esc(a.name)}（${avatarCodeLabel(a)}）</option>`).join('')}
+                <select data-kind="pre" data-idx="${i}" data-field="character" style="width:150px" title="角色选择框：选项由旁边的搜索框筛选">
+                  ${avatarFilterOptions(q, pa.character || '', { pool: prePool, allLabel: '（不指定角色）' })}
                 </select>
+                <input data-kind="pre" data-field="avatarSearch" data-idx="${i}" value="${attr(q)}" placeholder="搜索角色名 / 编号" style="width:150px" title="搜索词只用来筛选旁边的角色选择框">
                 <button class="mini" data-act="pre-up" data-idx="${i}">↑</button>
                 <button class="mini" data-act="pre-down" data-idx="${i}">↓</button>
                 <button class="mini danger" data-act="pre-del" data-idx="${i}">删除</button>
@@ -5546,8 +7130,8 @@ function renderInfoPanel() {
           <div class="hint mb">导出前会再做一次完整校验，有错误会拒绝导出并列出原因。</div>
           <hr>
           <div class="row mb">
-            <button class="mini" data-act="new-blank">新建空白策略</button>
-            <button class="mini" data-act="new-preset">新建（含兜底等待）</button>
+            <button class="mini" data-act="new-preset">新建（含兜底动作）</button>
+            <button class="mini" data-act="new-blank">新建空白策略（不建议）</button>
             <button class="mini" data-act="drafts">本地草稿…</button>
           </div>
           <div class="hint">草稿按「策略名称 + 版本」两个条件自动保存到浏览器本地（二者有其一不同就是不同的草稿），共 ${Object.keys(drafted).length} 份</div>
@@ -5562,6 +7146,18 @@ function renderInfoPanel() {
             <div class="k">涉及角色</div><div class="v">${new Set(s.actions.map(a => a.character || '当前角色')).size}</div>
             <div class="k">优先级条目</div><div class="v">${expandPriorities(s.actions, null).length}（含其他触发条件展开）</div>
             <div class="k">全局错误/警告</div><div class="v">${v.errors.length} / ${v.warnings.length}</div>
+            <div class="k">命座要求</div><div class="v">${(() => {
+              const n = s.actions.filter(a => consHasRequirement(a)).length;
+              const chs = consCharacters(s.actions);
+              return n ? `${n} 条动作设置了命座要求（${chs.length} 个角色）` : '没有动作设置命座要求';
+            })()}</div>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="mini" data-act="cons-switch">快捷开关高命座手法</button>
+            <span class="hint">${(() => {
+              const chs = consCharacters(s.actions);
+              return chs.length ? `可切换的角色：${chs.map(c => esc(c || '当前角色')).join('、')}` : '还没有动作设置「达到命座开启 / 达到命座关闭」，在动作卡片的「触发条件」→「命座要求」里设置';
+            })()}</span>
           </div>
         </div>
 
@@ -5572,18 +7168,92 @@ function renderInfoPanel() {
             <span class="pill">[动作类型][元素类型][角色编号×2][同类型第 N 条]</span><br>
             元素类型号按元素反应的先后手顺序分配：<b>1</b> 冰 · <b>2</b> 火 · <b>3</b> 水 · <b>4</b> 雷 · <b>5</b> 风 · <b>6</b> 岩 · <b>7</b> 草（<b>0</b> 元素未定/当前角色；同元素内按 BetterGI 内置角色表次序 01、02…）。<br>
             例如 <b>33011</b> = 后台输出 · 水元素 · 芭芭拉(01) · 第 1 条；<b>14041</b> = 开盾 · 雷元素 · 菲谢尔(04) · 第 1 条。<br>
-            动作类型 0（战斗检查与标记）只用于「当前角色」，编号退化成 1 位：<b>1</b>~<b>9</b>。<br>
+            动作类型 0（战斗检查与标记）只用于「当前角色」，编号退化成 1 位：<b>1</b>~<b>9</b>（这 9 个槽位都满时编辑器会临时多给一个尾数 <b>10</b>，校验面板会提示需要「按规则重排编号」）。<br>
             尾数 0 不用于动作，只出现在其他触发条件的 priority 里作为插入位。
           </div>
           <hr>
           <div class="hint" style="line-height:1.75">
             动作类型含义（数值越大越靠后）：<br>
             ${ACTION_TYPES.map(t => `<div style="margin:2px 0"><span class="pill">${t.code}</span> ${esc(t.name)}：${esc(t.cn || '')}</div>`).join('')}
+            <div style="margin-top:6px">为以上动作类型分配的数字，是根据“高血量，所需前置动作未执行，动作可能从未释放过”的基础条件假定下的动作优先程度决定的。</div>
           </div>
         </div>
       </div>
     </div>`;
   bindQuickCommandPanels();
+}
+
+/* ---------------- 快捷开关高命座手法 ----------------
+ * 列表里展示「有动作设置了达到命座开启 / 达到命座关闭」的每一个角色，
+ * 以及该角色可切换动作开关的相关命座；同一个角色有多个可切换命座时就分成几条 chip 放在一起。
+ * 点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座 ≤ x 的动作启用、> x 的停用
+ * （也就是「有高命必有低命，没有低命必没有高命」），点「不启用高命手法」则把该角色全部停用。
+ */
+
+/** 某角色当前生效的命座（= 已勾选目标命座里最大的那个；0 表示没有启用任何高命手法） */
+function consLevelOf(actions, character) {
+  let k = 0;
+  for (const a of (actions || [])) {
+    if (String(a.character || '') !== String(character || '')) continue;
+    if (!consHasRequirement(a)) continue;
+    if (consActiveState(a)) k = Math.max(k, Number(a.consTarget));
+  }
+  return k;
+}
+
+function openConsSwitchModal() {
+  const actions = state.strategy.actions;
+  const chars = consCharacters(actions);
+  if (!chars.length) {
+    openModal({
+      title: '快捷开关高命座手法',
+      body: `<div class="warnbox">目前没有任何动作设置了「达到命座开启 / 达到命座关闭」。</div>
+        <div class="hint" style="margin-top:6px">请在「动作编辑」页的动作卡片里展开「触发条件」区块，在其中的「命座要求」里选择模式与目标命座数、并按需要勾选「按达到x命设置动作启用/停用」。</div>`,
+      actions: [{ label: '知道了', primary: true, value: null }],
+    });
+    return;
+  }
+
+  const render = () => {
+    const rows = chars.map((ch, i) => {
+      const targets = consTargetsFor(state.strategy.actions, ch);
+      const level = consLevelOf(state.strategy.actions, ch);
+      const cnt = state.strategy.actions.filter(a => String(a.character || '') === String(ch) && consHasRequirement(a)).length;
+      return `<div class="card" style="background:var(--bg3);margin-bottom:8px;padding:8px 10px">
+        <div class="row mb">
+          <span style="min-width:130px">${avatarLabel(ch)}</span>
+          <span class="hint">${cnt} 条动作有命座要求，可切换命座：${targets.map(x => `<span class="pill">${x}</span>`).join(' ')}</span>
+          <span style="flex:1"></span>
+          <span class="badge ${level ? 'ok' : 'warn'}">当前按 ${level ? level + ' 命' : '不启用高命手法'}</span>
+        </div>
+        <div class="row">
+          <button class="chip ${level === 0 ? 'on' : ''}" data-cons-set="${i}" data-cons-level="0">不启用高命手法</button>
+          ${[1, 2, 3, 4, 5, 6].map(x => `<button class="chip ${level === x ? 'on' : ''}" data-cons-set="${i}" data-cons-level="${x}">${x} 命</button>`).join('')}
+        </div>
+        <div class="hint" style="margin-top:4px">点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座不高于 x 的动作启用、高于 x 的停用（有高命必有低命，没有低命必没有高命）。</div>
+      </div>`;
+    }).join('');
+    return `<div class="hint mb">这里只列出有动作设置了「达到命座开启 / 达到命座关闭」的角色。设置完之后，动作卡片里「命座要求」下「按达到x命设置动作启用/停用」的勾选状态会同步变化，导出时写进各动作的 <span class="pill">consRequirement</span> 字段与 expression。</div>
+      <div class="scroll">${rows}</div>`;
+  };
+
+  openModal({
+    title: '快捷开关高命座手法',
+    body: render(),
+    actions: [{ label: '关闭', primary: true, value: null }],
+  });
+  $('modalBody').onclick = (e) => {
+    const btn = e.target.closest ? e.target.closest('[data-cons-set]') : null;
+    if (!btn) return;
+    const i = Number(btn.getAttribute('data-cons-set'));
+    const level = Number(btn.getAttribute('data-cons-level'));
+    const ch = chars[i];
+    if (ch === undefined) return;
+    applyConsLevel(state.strategy.actions, ch, level);
+    // 勾选状态直接参与 expression，改完要重跑校验并刷新面板 / 预览
+    refresh(['info', 'actions', 'preview']);
+    $('modalBody').innerHTML = render();
+  };
 }
 
 /* ---------------- 事件与字段处理 ---------------- */
@@ -5611,6 +7281,7 @@ const infoHandlers = {
   'import': () => doImport(),
   'merge': () => doMerge(),
   'export': () => doExport(),
+  'cons-switch': () => openConsSwitchModal(),
   'new-blank': () => confirmDiscard(() => newStrategy('blank')),
   'new-preset': () => confirmDiscard(() => newStrategy('preset')),
   'drafts': () => openDraftManager(),
@@ -5618,10 +7289,6 @@ const infoHandlers = {
 
 const infoFieldHandlers = {
   info: (i) => {
-    if (i.field === 'preAvatarSearch') {
-      state.ui.preAvatarSearch = i.value;
-      return 'refresh';
-    }
     state.strategy.info[i.field] = i.value;
     // 「策略名称 / 版本」：只刷新标题与底栏提示，绝不重建面板 ——
     // 重建会打断中文输入法的候选框（change / 组字结束的补发也会走到这里），
@@ -5633,15 +7300,49 @@ const infoFieldHandlers = {
   pre: (i) => {
     const pa = state.strategy.info.preActions[Number(i.idx)];
     if (!pa) return false;
+    // 角色搜索框：只更新这一行的角色选择框选项，不动模型、不重建面板
+    // （不重建面板才不会打断输入法；搜索框自身也不再弹任何候选层）
+    if (i.field === 'avatarSearch') {
+      setPreSearch(i.idx, i.value);
+      refreshPreAvatarSelect(i.el, i.idx);
+      return false;
+    }
     pa[i.field] = i.value;
-    // 手输指令（或改角色）后立刻做一次输入内容检查：刷新本行反馈 + 右侧校验面板
-    if (i.field === 'cmd' || i.field === 'character') {
+    // 选中角色只更新模型，不重建面板（否则会打断旁边的搜索框与输入法）。
+    // 顺手清空旁边的搜索框：搜索词的作用就是「把角色选择框缩小到几个候选」，
+    // 选完就该恢复成全部角色，否则选择框会一直卡在筛选结果里。
+    if (i.field === 'character') {
+      setPreSearch(i.idx, '');
+      const row = i.el && i.el.closest ? i.el.closest('.row') : null;
+      const box = row && row.querySelector ? row.querySelector('[data-field="avatarSearch"]') : null;
+      if (box) {
+        box.value = '';
+        // 搜索框已经清空：选择框的选项立刻恢复成全部角色（否则会一直卡在筛选结果里）
+        refreshPreAvatarSelect(box, i.idx);
+      }
+      updateCommandFeedback(`pre:${i.idx}`, pa.cmd || '', 'pre');
+      refreshLiveIssues();
+      return false;
+    }
+    // 手输指令后立刻做一次输入内容检查：刷新本行反馈 + 右侧校验面板
+    if (i.field === 'cmd') {
       updateCommandFeedback(`pre:${i.idx}`, pa.cmd || '', 'pre');
       refreshLiveIssues();
     }
     return false;
   },
 };
+
+/** 按该行角色搜索框里的内容重建旁边的角色下拉的选项（不重建面板，输入焦点与输入法都不受影响） */
+function refreshPreAvatarSelect(input, idx) {
+  if (!input || !input.getAttribute) return;
+  const row = input.closest ? input.closest('.row') : null;
+  const sel = row && row.querySelector ? row.querySelector('select[data-field="character"]') : null;
+  if (!sel) return;
+  const n = Number(idx);
+  const pa = (state.strategy.info.preActions || [])[n];
+  sel.innerHTML = avatarFilterOptions(input.value, pa ? (pa.character || '') : '', { pool: AVATARS.filter(a => !a.virtual), allLabel: '（不指定角色）' });
+}
 
 
 /* ==================== ui_actions.js ==================== */
@@ -5666,7 +7367,7 @@ function filteredAvatars() {
       else if (r !== ui.filterRarity) continue;
     }
     if (ui.onlyTeam && team.length === 4 && !av.virtual && !team.includes(av.name)) continue;
-    if (q && !(av.name.toLowerCase().includes(q) || String(av.id || '').includes(q))) continue;
+    if (q && !avatarHitAll(av, q)) continue;
     list.push({ av, key, cnt });
   }
   return list;
@@ -5776,7 +7477,7 @@ function renderActionCard(act) {
       ${act.ensureCast ? '<span class="pill" title="确保E技能释放成功">ensureCast</span>' : ''}
       ${mpCount ? `<span class="pill">其他 ×${mpCount}</span>` : ''}
       <span data-tagspill="${attr(act.id)}">${tagsPillHtml(tags)}</span>
-      <span class="dim" style="font-size:12px" data-cardsummary="${attr(act.id)}">${esc(cond || '（无条件=恒真）')}</span>
+      <span class="dim cardsummary" style="font-size:12px" data-cardsummary="${attr(act.id)}" title="动作指令串：${attr(cmd || '（空指令）')}">${esc(cmd || '（空指令）')}</span>
       <span style="flex:1"></span>
       <span data-cardbadges="${attr(act.id)}">${errs.length ? `<span class="badge err">${errs.length}</span>` : ''}${warns.length ? `<span class="badge warn">${warns.length}</span>` : ''}</span>
       <button class="mini" data-act="card-up" data-id="${attr(act.id)}">↑</button>
@@ -5879,9 +7580,11 @@ function renderCardCmdTab(act, pi, typeName, slotCnt) {
 /** 条件输入框的 id（用于把快捷添加生成的片段插到光标位置） */
 const condRefId = (kind, id, idx) => (kind === 'morenew' ? `morenew:${id}` : kind === 'more' ? `more:${id}:${idx}` : kind === 'cond' ? `cond:${id}` : `${kind}:${id}:${idx}`);
 
-/** 读取条件目标当前文本 */
+/** 读取条件目标当前文本。
+ *  'morenew'（「添加其他触发条件」表单里还没入库的那条）已经不提供输入框了 ——
+ *  触发条件一律等条目加进列表之后在条目里编辑（见 renderCardMoreTabInner），所以这里返回空串。 */
 function getCondText(kind, id, idx) {
-  if (kind === 'morenew') return (state.ui.newMoreText || {})[id] || '';
+  if (kind === 'morenew') return '';
   if (kind === 'more') {
     const a = state.strategy.actions.find(x => x.id === id);
     const mp = a && a.morePriorities[Number(idx)];
@@ -5891,19 +7594,24 @@ function getCondText(kind, id, idx) {
   return a ? (a.conditionText || '') : '';
 }
 
-/** 写入条件目标文本 */
+/**
+ * 写入条件目标文本。
+ * kind 取值：'condtext'（主条件）/ 'moretext'（其他触发条件的触发条件）/
+ *            'morenewtext'（旧版「添加其他触发条件」表单里还没入库的那条，已废弃）/ 旧别名 'cond' / 'more'。
+ * 注意每个分支都要 return，否则会继续往下走到「主条件」那一段，
+ * 把这条动作的 conditionText 写成其他触发条件的文本（或者反过来被清空）。
+ */
 function writeCondText(kind, id, idx, text) {
-  if (kind === 'morenew') {
-    if (!state.ui.newMoreText) state.ui.newMoreText = {};
-    state.ui.newMoreText[id] = text;
-    return;
-  }
-  if (kind === 'more') {
+  if (kind === 'morenew' || kind === 'morenewtext') return;   // 表单里已经没有这个输入框了
+  if (kind === 'more' || kind === 'moretext') {
+    if (!id) return;
     const a = state.strategy.actions.find(x => x.id === id);
     const mp = a && a.morePriorities[Number(idx)];
     if (mp) mp.text = text;
     return;
   }
+  if (kind !== 'condtext' && kind !== 'cond') return;
+  if (!id) return;
   const a = state.strategy.actions.find(x => x.id === id);
   if (a) a.conditionText = text;
 }
@@ -5929,14 +7637,22 @@ function condCaretTextarea(kind, id, idx) {
  * 条件输入框的「模型 → 输入框」同步。
  * 快捷添加条件插入片段后会重建整块面板，重建出来的输入框必须显示模型里的内容；
  * 这里再兜一次底：只要输入框还挂在文档里、内容与模型不一致，就以模型为准写回去，
- * 避免出现“模型里已经有内容（点“添加其他触发条件”能带进新条目），但输入框看起来被清空了”的情况。
+ * 避免出现“模型里已经有内容（点「添加其他触发条件」能带进新条目），但输入框看起来被清空了”的情况。
+ * 同时它也是「写回」的反向兜底：某次把界面内容写回模型之后，界面上的旧值必须一起更新，
+ * 否则下一次写回又会拿这个**过期的旧值**覆盖模型 —— 那正是「最后一次编辑的内容在草稿重载后消失」的成因。
  */
 function syncCondTextareasFromModel() {
   document.querySelectorAll('textarea[data-cond-ref]').forEach(el => {
+    if (!el || !el.getAttribute || el.isConnected === false) return;
     const info = condFieldInfo(el);
     if (!info) return;
     const want = getCondText(info.kind, info.id, info.idx);
-    if (el.value !== want) el.value = want;
+    if (el.value === want) return;
+    // 用户正在这个输入框里打字（含输入法组字）时不动它：这时它的内容就是最新的，等事件来写回模型即可
+    if (typeof document !== 'undefined' && document.activeElement === el) return;
+    el.value = want;
+    // 顺手把释义 / 预览按模型内容就地刷新，界面与模型不会再出现两套说法
+    if (typeof updateCondExplanation === 'function') updateCondExplanation(info);
   });
 }
 
@@ -6059,22 +7775,17 @@ function cfCharQuery(st, key) {
   return st.cq[key];
 }
 
-/**
- * 「动作参数」选择器里角色筛选下拉的选项与「当前角色」的哨兵值。
- * 「当前角色」在动作模型里的 character 是空字符串，而 <option value=""> 已经是「（全部角色）」，
- * 两者共用空值会让「当前角色」既选不中、又表现成“选了但筛选没生效”（下拉会跳回「全部角色」）。
- * 所以筛选下拉的选项值用这个哨兵值表示「当前角色」；筛选状态里存的就是这个值，
- * 判断时由 cfFilterAllowsChar 负责把它翻译回模型里的空字符串。
- */
-const CF_CHAR_CURRENT = '__current__';
-
 /** 筛选下拉里选了「（全部角色）」= 不筛选；选了「当前角色」= 只留 character 为空的动作 */
 function cfFilterAllowsChar(charFilter, character) {
   if (charFilter === null || charFilter === undefined || charFilter === '') return true;
   return (character || '') === (charFilter === CF_CHAR_CURRENT ? '' : charFilter);
 }
 
-/** 角色筛选下拉：只列“已经添加了动作”的角色，并显示条数（当前选中的角色即使被搜索词过滤也保留，避免选择凭空消失） */
+/**
+ * 「角色筛选下拉」的选项：**只由旁边的角色搜索框决定**，只列“已经添加了动作”的角色。
+ * 当前选中的角色即使被搜索词过滤也保留，避免选择凭空消失。
+ * 搜索词命中「当前角色」时额外给一个只留 character 为空的动作的哨兵选项。
+ */
 function cfCharFilterOptions(q, cur) {
   const cnt = new Map();
   for (const a of state.strategy.actions) {
@@ -6083,55 +7794,61 @@ function cfCharFilterOptions(q, cur) {
   }
   const ql = String(q || '').trim().toLowerCase();
   const rows = [`<option value="" ${!cur ? 'selected' : ''}>（全部角色）</option>`];
+  const used = new Set(['']);
   for (const [k, n] of cnt) {
     const value = k === '' ? CF_CHAR_CURRENT : k;
-    const hay = (k || '当前角色').toLowerCase();
-    if (ql && !hay.includes(ql) && value !== cur) continue;
+    if (!avatarMatchesQuery(k, ql) && value !== cur) continue;
+    used.add(value);
     // 「当前角色」（character 为空）用哨兵值，避免和「（全部角色）」的空值撞车
     rows.push(`<option value="${attr(value)}" ${cur === value ? 'selected' : ''}>${esc(k || '当前角色')}（${n} 条）</option>`);
+  }
+  if (cur && !used.has(String(cur))) {
+    rows.push(`<option value="${attr(cur)}" selected>${esc(String(cur) === CF_CHAR_CURRENT ? '当前角色' : cur)}（0 条）</option>`);
   }
   return rows.join('');
 }
 
-/** 动作下拉：值为动作节点的 index（已选中的动作即使被角色筛选排除也保留） */
+/**
+ * 动作下拉：值为动作节点的 index。
+ * **只按「角色筛选下拉」筛选**，不看角色搜索框 —— 搜索框只负责筛选那个角色下拉。
+ * 已选中的动作即使被角色筛选排除也保留，避免选择凭空消失。
+ */
 function cfActionOptions(charFilter, selected) {
-  const list = state.strategy.actions.filter(a => cfFilterAllowsChar(charFilter, a.character) || String(a.index) === String(selected));
-  list.sort((a, b) => a.index - b.index);
+  const allowed = state.strategy.actions.filter(a => cfFilterAllowsChar(charFilter, a.character) || String(a.index) === String(selected));
+  allowed.sort((a, b) => a.index - b.index);
   const rows = [`<option value="">（默认：本动作）</option>`];
-  for (const a of list) {
+  for (const a of allowed) {
     const inFilter = cfFilterAllowsChar(charFilter, a.character);
     rows.push(`<option value="${a.index}" ${String(selected) === String(a.index) ? 'selected' : ''}>${a.index} · ${esc(a.name || '(未命名)')}${inFilter ? '' : ` · ${esc(a.character || '当前角色')}`}</option>`);
   }
   return rows.join('');
 }
 
-/** 角色下拉（可按搜索词过滤；已选中的角色始终保留） */
+/** 角色下拉（选项只按搜索词过滤；已选中的角色始终保留） */
 function cfCharOptions(q, selected) {
-  const ql = String(q || '').trim().toLowerCase();
-  const rows = [`<option value="">（默认：本动作的角色）</option>`];
-  for (const a of AVATARS) {
-    if (a.virtual) continue;
-    if (ql && !a.name.toLowerCase().includes(ql) && selected !== a.name) continue;
-    rows.push(`<option value="${attr(a.name)}" ${selected === a.name ? 'selected' : ''}>${esc(a.name)}</option>`);
-  }
-  return rows.join('');
+  return `<option value="">（默认：本动作的角色）</option>`
+    + avatarFilterOptions(q, selected, { allLabel: '', allValue: '', keepAll: false });
 }
 
-/** 动作参数：角色筛选 + 角色搜索 + 动作下拉（选中的是动作 index） */
+/**
+ * 动作参数：角色筛选下拉（**只由角色搜索框筛选**）+ 角色搜索框 + 动作下拉（**只由角色筛选下拉筛选**）。
+ * 角色搜索框自己不再弹任何候选层；它唯一的输出就是旁边那个角色下拉里的选项。
+ */
 function cfActionPicker(st, key, value) {
   const f = cfActionFilter(st, key);
   return `<span class="row" style="gap:6px;margin:2px 0">
-      <select data-cfchar="${attr(key)}" style="width:150px" title="按角色筛选动作">${cfCharFilterOptions(f.q, f.char)}</select>
-      <input data-cfcharq="${attr(key)}" style="width:90px" value="${attr(f.q)}" placeholder="搜索角色">
-      <select data-cfp="${attr(key)}" style="width:250px">${cfActionOptions(f.char, value)}</select>
+      <select data-cfchar="${attr(key)}" style="width:150px" title="角色筛选：选项由旁边的角色搜索框筛选；动作下拉只按这里筛选">${cfCharFilterOptions(f.q, f.char)}</select>
+      <input data-cfcharq="${attr(key)}" value="${attr(f.q || '')}" placeholder="搜索角色名 / 编号" title="搜索词只用来筛选左边的角色筛选下拉" style="width:110px">
+      <select data-cfp="${attr(key)}" style="width:250px" title="动作选项：只按左边的角色筛选下拉筛选">${cfActionOptions(f.char, value)}</select>
     </span>`;
 }
 
-/** 角色参数：角色下拉 + 角色搜索 */
+/** 角色参数：角色下拉（只按搜索词过滤）+ 角色搜索框 */
 function cfCharPicker(st, key, value) {
+  const q = cfCharQuery(st, key);
   return `<span class="row" style="gap:6px;margin:2px 0">
-      <select data-cfp="${attr(key)}" style="width:150px">${cfCharOptions(cfCharQuery(st, key), value)}</select>
-      <input data-cfcs="${attr(key)}" style="width:90px" value="${attr(cfCharQuery(st, key))}" placeholder="搜索角色">
+      <select data-cfp="${attr(key)}" style="width:150px" title="角色选项：由旁边的角色搜索框筛选">${cfCharOptions(q, value)}</select>
+      <input data-cfcs="${attr(key)}" value="${attr(q || '')}" placeholder="搜索角色名 / 编号" title="搜索词只用来筛选左边的角色下拉" style="width:110px">
     </span>`;
 }
 
@@ -6154,6 +7871,72 @@ function cfCountOptions(n, min) {
   return rows.join('');
 }
 
+/* ---------------- 条件函数里的「时间入参」（count 的起始 / 结束时间） ----------------
+ * BetterGI 的 count(动作,时间1,时间2) 两个时间入参都以「开战」为基准（EvalCount 里
+ * start 默认 0、end 默认当前 t，直接与执行记录的时间戳比较），所以：
+ *   · 直接填一个数值           → 距开战的第 N 秒（保持 BetterGI 的原意）；
+ *   · 想表达「距当前时间 t 之前 N 秒」→ 必须写成 t-N（start/end 是动态求值的表达式）；
+ *   · 想表达「从目标动作上次执行到现在」→ 写成 t-since(动作)（t 减去 since()）。
+ * 这三种写法都用选择项生成，避免用户手算错基准。
+ */
+const CF_TIME_MODES = [
+  ['num', '（时间值）'],
+  ['tmi', 't-（时间值）'],
+  ['tsi', 't-since(动作)'],
+];
+
+/** 时间入参当前选择的模式（缺省 = 直接填时间值） */
+function cfTimeMode(st, tag) {
+  const v = (st.vals || {})[tag + 'Mode'];
+  if (v === 'num' || v === 'tmi' || v === 'tsi') return v;
+  return 'num';
+}
+
+/** 时间入参 → 写进 count() 的实参文本 */
+function cfTimeArgText(st, tag) {
+  const V = (k) => ((st.vals && st.vals[k] !== undefined && st.vals[k] !== null) ? String(st.vals[k]).trim() : '');
+  const mode = cfTimeMode(st, tag);
+  const num = V(tag + 'Num');
+  if (mode === 'tmi') return num === '' || Number(num) === 0 ? 't' : `t-${num}`;
+  if (mode === 'tsi') {
+    const a = V(tag + 'Since');
+    return a === '' ? 't-since()' : `t-since(${a})`;
+  }
+  return num;
+}
+
+/**
+ * 一个时间入参的完整输入区：
+ *   模式下拉 + 数值框（模式 1、2）+ 目标动作选择器（模式 3，含角色筛选与角色搜索框）。
+ * 两行都渲染出来，靠 hidden 切换显示 —— 不重建 DOM，输入焦点与输入法都不受影响。
+ */
+function cfTimeParts(st, key, title) {
+  const mode = cfTimeMode(st, key);
+  const V = (k) => cfTimeVal(st, k);
+  return `<div class="row" style="gap:6px;margin:2px 0">
+      <span class="hint">${esc(title)}</span>
+      <select data-cfp="${attr(key)}Mode" style="width:150px" title="选择这个时间入参的表达方式">${CF_TIME_MODES.map(([v, t]) => `<option value="${attr(v)}" ${mode === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      <input data-cfp="${attr(key)}Num" type="number" step="any" style="width:110px" value="${attr(V(key + 'Num'))}" placeholder="秒数" ${mode === 'tsi' ? 'hidden' : ''}>
+    </div>
+    <div class="row" style="gap:6px;margin:2px 0" ${mode === 'tsi' ? '' : 'hidden'} data-cftime="${attr(key)}">
+      <span class="hint">目标动作</span>
+      ${cfActionPicker(st, key + 'Since', V(key + 'Since'))}
+      <span class="hint">（留空 = 本动作）</span>
+    </div>`;
+}
+
+/** 切换时间入参模式：只切换显示，不重建参数面板（输入焦点与输入法都不受影响） */
+function cfSwitchTimeMode(box, key, mode) {
+  const num = box.querySelector(`[data-cfp="${cssEsc(key)}Num"]`);
+  if (num) num.hidden = mode === 'tsi';
+  const row = box.querySelector(`[data-cftime="${cssEsc(key)}"]`);
+  if (row) row.hidden = mode !== 'tsi';
+}
+function cfTimeVal(st, k) {
+  const v = st && st.vals ? st.vals[k] : undefined;
+  return v === undefined || v === null ? '' : String(v);
+}
+
 /** 生成一个条件函数片段（不弹窗、就地生成，可插到输入框的光标位置） */
 function buildCondSnippet(fn, get) {
   const opt = (v) => {
@@ -6169,9 +7952,11 @@ function buildCondSnippet(fn, get) {
     }
     case 'count': {
       const a = opt(get('a'));
-      const b = opt(get('b'));
-      const c = opt(get('c'));
-      const args = a ? [a, b, c].filter(x => x !== null).join(',') : '';
+      const view = { vals: { bMode: get('bMode'), bNum: get('bNum'), bSince: get('bSince'), cMode: get('cMode'), cNum: get('cNum'), cSince: get('cSince') } };
+      const b = cfTimeArgText(view, 'b');
+      const c = cfTimeArgText(view, 'c');
+      // 目标动作留空时它前面的逗号要保留，否则两个时间会被当成“目标动作 + 起始时间”
+      const args = a ? [a, b, c].join(',') : ((b || c) ? `,${b},${c}` : '');
       return condCmpExpr(`count${args ? `(${args})` : ''}`, get('cmp'), get('num'));
     }
     case 'last-check':
@@ -6202,12 +7987,13 @@ function buildCondSnippet(fn, get) {
     // 组合 2：多个动作中是否有至少一个动作执行超过指定次数 → max(count(…,…,…),…) > 数值
     case 'combo-max-count': {
       const n = clamp(Number(get('n')) || 2, 1, 9);
-      const b = opt(get('b'));
-      const c = opt(get('c'));
+      const view = { vals: { bMode: get('bMode'), bNum: get('bNum'), bSince: get('bSince'), cMode: get('cMode'), cNum: get('cNum'), cSince: get('cSince') } };
+      const b = cfTimeArgText(view, 'b');
+      const c = cfTimeArgText(view, 'c');
       const items = [];
       for (let i = 1; i <= n; i++) {
         const a = opt(get('arg' + i));
-        const args = a ? [a, b, c].filter(x => x !== null).join(',') : '';
+        const args = a ? [a, b, c].join(',') : ((b || c) ? `,${b},${c}` : '');
         items.push(args ? `count(${args})` : 'count()');
       }
       return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
@@ -6229,11 +8015,9 @@ function renderCondFnParams(ref, st) {
         ${cfCmpRow(st, '')}`;
     case 'count': {
       return `<div class="row"><label class="f">目标动作 ${cfActionPicker(st, 'a', V('a'))}</label></div>
-        <div class="row">
-          <label class="f">起始秒 <input data-cfp="b" type="number" step="any" style="width:110px" value="${attr(V('b'))}" placeholder="可空"></label>
-          <label class="f">结束秒 <input data-cfp="c" type="number" step="any" style="width:110px" value="${attr(V('c'))}" placeholder="可空"></label>
-        </div>
-        <div class="hint">目标动作留空表示“本动作”；起始/结束秒留空表示开战到当前时间。</div>
+        ${cfTimeParts(st, 'b', '起始时间')}
+        ${cfTimeParts(st, 'c', '结束时间')}
+        <div class="hint">目标动作留空表示“本动作”。两个时间入参以<b>开战</b>为基准：「（时间值）」= 距开战的第 N 秒（留空 = 开战 / 当前时间）；「t-（时间值）」= 距当前时间 t 往前 N 秒（留空或 0 只写 t）；「t-since(动作)」= 从该动作上次执行到现在（留空 = 本动作）。</div>
         ${cfCmpRow(st, '')}`;
     }
     case 'last-check':
@@ -6270,17 +8054,28 @@ function renderCondFnParams(ref, st) {
       for (let i = 1; i <= n; i++) {
         html += `<div class="row"><label class="f">参数 ${i} 的目标动作 ${cfActionPicker(st, 'arg' + i, V('arg' + i))}</label></div>`;
       }
-      html += `<div class="row">
-          <label class="f">起始秒（统一应用） <input data-cfp="b" type="number" step="any" style="width:110px" value="${attr(V('b'))}" placeholder="可空"></label>
-          <label class="f">结束秒（统一应用） <input data-cfp="c" type="number" step="any" style="width:110px" value="${attr(V('c'))}" placeholder="可空"></label>
-        </div>
-        <div class="hint">起始/结束秒会统一写进 max() 里的每一项 count()；目标动作留空表示“本动作”（此时该 count 不会写入起始/结束秒）。</div>`;
+      html += cfTimeParts(st, 'b', '起始时间（统一应用）');
+      html += cfTimeParts(st, 'c', '结束时间（统一应用）');
+      html += `<div class="hint">起始/结束时间会统一写进 max() 里的每一项 count()（写法与 count 的说明相同，都以开战为基准）；目标动作留空表示“本动作”（此时该 count 不写入时间）。</div>`;
       html += '<div class="hint">只要这些动作里<b>有一个</b>“在指定时间区间内执行次数大于”下面的数值，条件就成立；从未执行过的动作次数为 0，不影响判断。</div>';
       html += cfCmpRow(st, '>');
       return html;
     }
     default: return '';
   }
+}
+
+/**
+ * 条件函数下拉里的选项名。
+ * 只包含单一函数的选项要补上函数本身的写法（「距开战时间」→「距开战时间 —— t」），
+ * 方便直接看出会插入什么函数；组合函数（模板里还带参数占位）的选项名后已经写了
+ * 完整的算式（如 min(since(参数1),…) < 参数a），再补一次只会更长，所以保持原样。
+ */
+function cfOptionLabel(label, tpl) {
+  const t = String(tpl === undefined || tpl === null ? '' : tpl).trim();
+  if (!t) return String(label);
+  if (/[(),\s]/.test(t)) return `${label} —— ${t}`;
+  return `${label} —— ${t.replace(/[（(].*$/, '')}`;
 }
 
 /** 快捷添加条件（就地展开的整块 UI） */
@@ -6295,7 +8090,7 @@ function renderCondQuickAdd(ref, kind, id, idx) {
         <label class="f">条件函数
           <select data-cfp="fn" style="width:200px">
             <option value="">（请选择）</option>
-            ${COND_QUICK_FUNCS.map(([n, label, tpl]) => `<option value="${attr(n)}" ${st.fn === n ? 'selected' : ''}>${esc(label)}${tpl && tpl !== n ? ` — ${esc(tpl)}` : ''}</option>`).join('')}
+            ${COND_QUICK_FUNCS.map(([n, label, tpl]) => `<option value="${attr(n)}" ${st.fn === n ? 'selected' : ''}>${esc(cfOptionLabel(label, tpl))}</option>`).join('')}
           </select>
         </label>
         <button type="button" class="mini primary" data-cf="ins" ${st.fn ? '' : 'disabled'}>插入此片段到光标位置</button>
@@ -6387,20 +8182,36 @@ function onCfInput(box, el) {
   const charKey = el.getAttribute('data-cfchar');
   if (charKey !== null) {
     cfActionFilter(st, charKey).char = el.value;
+    // 选完角色就把旁边的搜索框清空：搜索词只负责把角色下拉缩小到几个候选，
+    // 选完恢复成全部角色，免得角色下拉一直卡在筛选结果里。
+    const f = cfActionFilter(st, charKey);
+    if (f.q) {
+      f.q = '';
+      const box2 = box.querySelector(`[data-cfcharq="${cssEsc(charKey)}"]`);
+      if (box2) box2.value = '';
+    }
     refreshActionPicker(box, ref, st, charKey);
     return;
   }
-  // 角色搜索框（筛选动作选择器的角色列表）
+  // 角色搜索框：只刷新旁边那个角色筛选下拉的选项（自己不弹任何候选层）
   const charQKey = el.getAttribute('data-cfcharq');
   if (charQKey !== null) {
     cfActionFilter(st, charQKey).q = el.value;
+    const f = cfActionFilter(st, charQKey);
+    // 搜索词过滤掉当前选中的角色时，顺手把筛选恢复成「全部角色」，
+    // 否则动作下拉会一直卡在“已选角色被过滤但选择仍生效”的状态里。
+    if (f.char && !avatarMatchesQuery(f.char === CF_CHAR_CURRENT ? '' : f.char, String(el.value || '').trim().toLowerCase())) {
+      f.char = '';
+      const sel = box.querySelector(`[data-cfchar="${cssEsc(charQKey)}"]`);
+      if (sel) sel.value = '';
+    }
     refreshActionPicker(box, ref, st, charQKey);
     return;
   }
-  // 角色搜索框（筛选角色名下拉）
+  // 角色搜索框（角色参数）：只刷新角色下拉的选项
   const charSKey = el.getAttribute('data-cfcs');
   if (charSKey !== null) {
-    cfCharQuery(st, charSKey);
+    if (!st.cq) st.cq = {};
     st.cq[charSKey] = el.value;
     refreshCharPicker(box, ref, st, charSKey);
     return;
@@ -6420,6 +8231,8 @@ function onCfInput(box, el) {
     return;
   }
   st.vals[key] = el.value;
+  // 时间入参（count 的起始/结束时间）切换表达方式：只切换显示哪一行输入框，不重建参数面板
+  if (/^[bc]Mode$/.test(key)) cfSwitchTimeMode(box, key.slice(0, 1), el.value);
   // 参数项数变化时要重建参数输入框
   if (key === 'n') {
     const box2 = box.querySelector('[data-cfparams]');
@@ -6508,15 +8321,20 @@ function updateCondExplanation(info) {
   if (hint) hint.innerHTML = moreHintHtml(text, info.id);
 }
 
-/** 条件编辑区（直接输入框 + 快捷添加 + 释义 + 运算顺序预览 + 运算顺序说明） */
+/** 条件编辑区（直接输入框 + 快捷添加 + 释义 + 运算顺序预览 + 运算顺序说明）
+ *  opts.note 可以覆盖输入框上方那段说明：基础触发条件与「其他触发条件」的说明不同
+ *  （基础条件要写“高血量、前置未执行、可能从未释放过”那一套假定，
+ *   其他触发条件写的是“不符合基础条件假定的条件”，所以各传各的文案）。
+ */
 function renderCondEditor(kind, id, idx, opts) {
-  const o = Object.assign({ text: '', title: '', intro: '' }, opts || {});
+  const o = Object.assign({ text: '', title: '', intro: '', note: '' }, opts || {});
   const ref = refIdOf(kind, id, idx);
   const text = o.text === undefined || o.text === null ? getCondText(kind, id, idx) : o.text;
   const st = condSnippetState(ref);
+  const note = o.note || `${o.title || '触发条件表达式'}：这里写入的条件应遵守“高血量，所需前置动作未执行，动作可能从未释放过”的基础条件假定，用于对其他状况做判定的条件应该写入“其他触发条件”中`;
   return `
     ${o.intro ? `<div class="hint" style="margin:8px 0 6px">${o.intro}</div>` : ''}
-    <div class="hint" style="margin-bottom:4px">${esc(o.title || '触发条件表达式')}（可直接手输，也可以用下面的「快捷添加条件」拼）</div>
+    <div class="hint" style="margin-bottom:4px">${esc(note)}</div>
     ${ctrl({ tag: 'textarea', kind: kind === 'more' ? 'moretext' : (kind === 'morenew' ? 'morenewtext' : 'condtext'), actionId: id, idx, field: 'text', value: text || '', rows: 2, cls: 'mono', placeholder: '例如：low-hp || since(33011)>20　（留空 = 恒真）', extra: ` data-cond-ref="${attr(ref)}"` })}
     <details class="det sub" data-details="${attr(ref)}:quickadd" ${detailOpen(`${ref}:quickadd`, false) ? 'open' : ''}><summary>快捷添加条件</summary>
       ${renderCondQuickAdd(ref, kind, id, idx)}
@@ -6530,8 +8348,7 @@ function renderCondPreview(text, actionId) {
   const parsed = condParse(text || '', allActionNames(state.strategy.actions));
   if (parsed.error) return `<div class="errbox">${esc(parsed.error)}</div>`;
   if (!parsed.ast) {
-    return `<div class="warnbox">表达式为空：空条件<b>恒为真</b>，也就是说只要按 priority 轮到这条动作，它就会被执行（不满足条件的动作根本不会被考虑，所以不需要额外写条件）。</div>
-      <div class="hint" style="margin-top:4px">如果你想临时停用这条动作又不想删掉它，把表达式写成 <span class="pill">false</span>（恒假）即可。</div>`;
+    return `<div class="warnbox">表达式为空：空条件<b>恒为真</b>，也就是说只要按 priority 轮到这条动作，它就会被执行（不满足条件的动作根本不会被考虑，所以不需要额外写条件）。</div>`;
   }
   const rows = [];
   const ctx = actionId ? condExplainCtx(actionId) : null;
@@ -6549,6 +8366,57 @@ function renderCardCondTab(act) {
   return withCondUiAction(act.id, () => renderCardCondTabInner(act));
 }
 
+/**
+ * 「触发条件」区块下的子项：命座要求（consRequirement）。
+ * BetterGI 的动作节点里没有能保存命座要求的地方，本编辑器约定用自定义字段 consRequirement
+ * 保存（BetterGI 会静默忽略未知字段），数值含义见 core.js 顶部说明。
+ * 这里编辑的是「模式 + 目标命座数 + 按达到x命设置动作启用/停用」三元组。
+ */
+function renderCardConsSection(act) {
+  const mode = CONS_MODES.includes(act.consMode) ? act.consMode : 'none';
+  const target = Number(act.consTarget) > 0 ? Number(act.consTarget) : 0;
+  const none = mode === 'none' || target === 0;
+  const req = consRequirementOf(act);
+  const active = consActiveState(act);
+  // 收起时只留一行摘要：模式 / 目标命座数 /（勾选了「按达到x命设置动作启用/停用」时才有最后这一段）
+  const summary = none
+    ? '无命座要求'
+    : `${mode === 'close' ? '达到命座关闭' : '达到命座开启'} · ${target} 命${active ? ' · 达到目标命座' : ''}`;
+  return `
+    <details class="det sub" data-details="${attr(act.id)}:cons" ${detailOpen(`${act.id}:cons`, false) ? 'open' : ''} style="margin:10px 0 0">
+      <summary>命座要求 <span class="hint prev">${esc(summary)}</span></summary>
+      <div class="card" style="background:var(--bg3);margin:8px 0 0;padding:8px 10px">
+        <div class="row mb">
+          <span class="hint" style="font-weight:600">命座要求</span>
+          <select data-kind="cons" data-id="${attr(act.id)}" data-field="mode" style="width:150px">
+            <option value="none" ${none ? 'selected' : ''}>无命座要求</option>
+            <option value="open" ${mode === 'open' && !none ? 'selected' : ''}>达到命座开启</option>
+            <option value="close" ${mode === 'close' && !none ? 'selected' : ''}>达到命座关闭</option>
+          </select>
+          <span class="hint">目标命座数</span>
+          <select data-kind="cons" data-id="${attr(act.id)}" data-field="target" style="width:110px" ${none ? 'disabled' : ''}>
+            ${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${target === n ? 'selected' : ''}>${n} 命</option>`).join('')}
+          </select>
+          ${none ? '' : `<label class="f"><input type="checkbox" data-kind="cons" data-id="${attr(act.id)}" data-field="enabled" ${active ? 'checked' : ''}> 按达到${target}命设置动作启用/停用（勾选 = 启用，不勾选 = 停用）</label>`}
+        </div>
+        <div class="hint" style="line-height:1.75">
+          · 只有「无命座要求」时，写入动作节点的 expression 组成方式维持原样（<span class="pill">(触发条件) &amp;&amp; (队友条件)</span>）；<br>
+          · 选了「达到命座开启 / 达到命座关闭」之后，组成方式变成 <span class="pill">((触发条件) &amp;&amp; (命座要求)) &amp;&amp; (队友条件)</span>（队友条件为空时省略后一段），
+            其中「命座要求」就是一个纯粹的布尔值 <span class="pill">true</span> / <span class="pill">false</span>，<b>true 表示这条动作在目标命座之上被启用</b>；<br>
+          · 「达到命座开启 + 勾选」= <span class="pill">true</span>（<b>x 命及以上</b>执行这条动作）；「达到命座开启 + 不勾选」= <span class="pill">false</span>（x 命及以上不再执行）；<br>
+          · 「达到命座关闭 + 勾选」= <span class="pill">false</span>（同样表示 x 命及以上不执行）；「达到命座关闭 + 不勾选」= <span class="pill">true</span>（x 命及以上仍然执行）。<br>
+          勾选的联动规则是「有高命必有低命，没有低命必没有高命」：勾选 x 命会连带勾上目标命座不高于 x 的其他动作，取消勾选 x 命会连带取消目标命座不低于 x 的其他动作。<br>
+          · 写进动作节点的字段是 <span class="pill">consRequirement</span> = <b>${req}</b>：<b>正负号</b>表示「达到命座开启 / 达到命座关闭」（绝对值 = 目标命座数），
+          「启用 / 停用」由 expression 里那个布尔值表达（${esc(consDescribe(act))}）。<br>
+          · 这个字段是给本编辑器保存命座要求用的自定义字段，
+          BetterGI 会像忽略 <span class="pill">tags</span> 一样忽略它；为 0（无命座要求）时导出会省略这个字段。<br>
+          · 同一个角色多个动作的命座要求可以在「策略信息 / 导入导出」→「当前文件状态」下的
+          <b>「快捷开关高命座手法」</b>里按角色一键设置。
+        </div>
+      </div>
+    </details>`;
+}
+
 function renderCardCondTabInner(act) {
   const auto = autoExcludeExpr(act, state.strategy.actions);
   const wrap = [teammateExpr(act, state.strategy.actions), auto ? `自动排除：${auto}` : ''].filter(Boolean);
@@ -6559,6 +8427,7 @@ function renderCardCondTabInner(act) {
       title: '基础动作触发条件 → 写入 condition.expression',
       intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友条件已单独分离到「队友条件」区块，会自动与本区块内容取与）。',
     })}
+    ${renderCardConsSection(act)}
     <hr>
     <div class="hint" style="margin-bottom:4px">与队友条件合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap" id="condFinal-${attr(act.id)}">${esc(finalExpr || '（空 = 恒真）')}</div>
@@ -6729,7 +8598,7 @@ function morePriForm(id, idx) {
       <span class="hint">${esc(scopeLabel(scope))}${calc ? (calc.empty ? '（该段当前没有动作，取段边界）' : '（段内有动作，按规则取边界值）') : ''}</span>
     </div>
     ${typeZero ? '<div class="hint">动作类型 0（战斗检查与标记）是一整段，不能再按元素/角色细分；它的段边界是 0~9999，priority 不会落到某个元素或角色上。</div>' : ''}
-    ${renderCondEditor('more', id, idx, { text: mp.text, title: `其他触发条件 #${idx + 1} 的触发条件` })}
+    ${renderCondEditor('more', id, idx, { text: mp.text, title: `其他触发条件 #${idx + 1} 的触发条件`, note: `其他触发条件 #${idx + 1} 的触发条件：这里用于写入不符合基础条件假定的条件，例如用于判断“低血量”或“需要前置动作已执行”的动作，配合上方判定顺序选择可实现优先或延后此条件判定的效果` })}
     <div class="hint" style="margin-top:6px">写入 morePriorities 的表达式：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap" id="moreExpr-${attr(id)}-${attr(idx)}">${esc((buildMorePriorities(state.strategy.actions.find(x => x.id === id), state.strategy.actions)[Number(idx)] || {}).expression || '（空 = 恒真）')}</div>
   </div>`;
@@ -6770,10 +8639,10 @@ function renderCardMoreTabInner(act) {
 
   return `
     <div class="hint" style="margin:8px 0 6px">其他触发条件 → 写入 morePriorities。同一个动作可以在不同情境下占据不同的优先级位置；这些条目彼此平级、独立，命中哪条就执行同一个动作，不会再去看基础触发条件。</div>
-    ${rows || '<div class="hint">还没有其他触发条件。常见用法：低血时把这个动作提到最前面；或者平时降低优先级让位给其他动作。</div>'}
+    ${rows || '<div class="hint">还没有其他触发条件。请将不符合基础条件假定的判定条件，例如“低血量”或“有前置辅助动作执行”的条件添加在这里，这样就能为这些情况设置不同的判定优先级，以实现类似于“低血时该动作优先执行”的效果</div>'}
     <details class="det sub" data-details="${attr(act.id)}:moreadd" ${detailOpen(`${act.id}:moreadd`, false) ? 'open' : ''}>
       <summary>添加其他触发条件</summary>
-      <div class="hint" style="margin-top:6px">先填触发条件（可以用「快捷添加条件」拼），再选择它相对哪一类动作“优先于 / 次于”，priority 会按规则自动算出。</div>
+      <div class="hint" style="margin-top:6px">先选择它相对哪一类动作“优先于 / 次于”，priority 会按规则自动算出；点下面的按钮把这条其他触发条件加进列表。</div>
       <div class="row mb" style="margin-top:6px" data-moreaddform="${attr(act.id)}">
         <span class="hint">判定顺序</span>
         <select data-na="cmp" style="width:100px">
@@ -6802,11 +8671,12 @@ function renderCardMoreTabInner(act) {
       <div class="hint mb">${sp
         ? `判定范围：<b>${esc(sp.label)}</b> → 取值区间 ${sp.before} ~ ${sp.hi}；当前将取 <b>${calc ? calc.priority : '-'}</b>${calc && calc.empty ? '（该段还没有动作，取段边界）' : ''}${typeZero ? '（动作类型 0 是一整段，不能按元素/角色细分）' : ''}`
         : '请选择动作类型。'}</div>
-      <div>${renderCondEditor('morenew', act.id, '', { title: '这条其他触发条件的触发条件' })}</div>
+      <div class="warnbox mb">请先点下面的按钮把这条其他触发条件加进列表，再在新增条目里的「编辑触发条件与优先级」里填写触发条件。</div>
       <div class="row" style="margin-top:6px">
-        <button class="mini primary" data-act="more-add2" data-id="${attr(act.id)}">+ 添加这条其他触发条件</button>
+        <button class="mini primary" data-act="more-add2" data-id="${attr(act.id)}">+ 添加其他触发条件（先点这里）</button>
       </div>
-    </details>`;
+    </details>
+  `;
 }
 
 /* ---------------- 注释（tags） ----------------
@@ -6898,19 +8768,9 @@ function renderActionsPanel() {
   bindMoreAddForm();
 }
 
-/** 读取“新增其他触发条件”表单里手写的触发条件（草稿存在 state.ui.newMoreText 里） */
-function readNewMoreText(a) {
-  const t = (state.ui.newMoreText || {})[a.id];
-  if (t !== undefined && t !== null) return String(t).trim();
-  const el = document.querySelector(`textarea[data-cond-ref="${cssEsc(refIdOf('morenew', a.id, ''))}"]`);
-  return el ? el.value.trim() : '';
-}
-
-/** 清空“新增其他触发条件”表单里手写的触发条件与片段状态 */
+/** 清空「新增其他触发条件」表单里残留的片段状态（表单里已经不再有触发条件输入框了） */
 function resetNewMoreText(a) {
   if (state.ui.newMoreText) delete state.ui.newMoreText[a.id];
-  const el = document.querySelector(`textarea[data-cond-ref="${cssEsc(refIdOf('morenew', a.id, ''))}"]`);
-  if (el) el.value = '';
   state.ui.condSnippet[refIdOf('morenew', a.id, '')] = { fn: '', vals: {}, pos: 'cursor', af: {}, cq: {} };
 }
 
@@ -7278,15 +9138,8 @@ const actionsHandlers = {
   'card-dup': (t) => {
     const a = state.strategy.actions.find(x => x.id === t.getAttribute('data-id'));
     if (!a) return;
-    const r = addAction(a.character, a.type, { name: '', action: a.action, ensureCast: a.ensureCast });
-    if (!r.ok) { alert(r.error); return; }
-    const na = r.action;
-    na.name = nextCopyName(a.name);
-    na.conditionText = a.conditionText;
-    na.tags = a.tags || '';
-    na.teammates = JSON.parse(JSON.stringify(a.teammates));
-    na.morePriorities = (a.morePriorities || []).map(mp => ({ ...mp, id: newId(), scope: { ...mp.scope } }));
-    refresh(['actions', 'preview']);
+    // 先选复制给哪个角色（本角色 / 其他角色，带搜索框），再复制
+    pickCopyTarget(a).then((r) => { if (r) duplicateActionTo(a, r.character); });
   },
   'card-del': (t) => {
     const id = t.getAttribute('data-id');
@@ -7460,13 +9313,10 @@ const actionsHandlers = {
     const scope = { type, element, character };
     const cmp = f.cmp === 'before' ? 'before' : 'after';
     const calc = computePriority(scope, cmp, state.strategy.actions);
-    const ref = refIdOf('morenew', a.id, '');
-    const st = condSnippetState(ref);
-    const text = st.fn ? buildCondSnippet(st.fn, (k) => (st.vals || {})[k]) : '';
-    const typed = readNewMoreText(a);
-    const finalText = typed || text;   // 手输优先，没有手输就用快捷添加拼出来的片段
+    // 新条目一律先建成空触发条件（空 = 恒真），触发条件等内容都到上面那条条目里改：
+    // 表单里不再有输入框，所以不存在「编了没保存」和「快捷插入把输入框清空」两个问题。
     a.morePriorities.push({
-      id: newId(), text: finalText, priority: calc ? calc.priority : 0,
+      id: newId(), text: '', priority: calc ? calc.priority : 0,
       cmp, scope, manualPriority: false,
     });
     resetNewMoreText(a);
@@ -7497,13 +9347,90 @@ const actionsHandlers = {
   '*': (t, e) => { /* 兜底 */ },
 };
 
+/** 复制动作时的备用名称：原名没被占用就直接用，占用了才在后面加数字（2、3…） */
 function nextCopyName(name) {
-  if (!name) return '';
+  const base = String(name || '').trim();
+  if (!base) return '';
   const names = new Set(state.strategy.actions.map(a => a.name));
-  let i = 2;
-  let n = `${name}-副本`;
-  while (names.has(n)) { n = `${name}-副本${i}`; i++; }
-  return n;
+  if (!names.has(base)) return base;
+  for (let i = 2; i < 1000; i++) {
+    const n = `${base}${i}`;
+    if (!names.has(n)) return n;
+  }
+  return `${base}${Date.now()}`;
+}
+
+/**
+ * 复制动作时改写「动作名称」里的角色名：
+ * 只认**标准名**（combat_avatar.json 里的名字），把它换成目标角色的标准名；
+ * 名称里出现的是昵称（「芙芙e」「奶奶开盾」）时不猜、原样保留。
+ */
+function renameForCharacter(name, from, to) {
+  const raw = String(name || '');
+  const src = from || '当前角色';
+  const dst = to || '当前角色';
+  if (src === dst) return raw;
+  if (!raw.includes(src)) return raw;
+  return raw.split(src).join(dst);
+}
+
+/** 复制目标角色弹窗（含搜索框）；返回 { character } 或 null（取消） */
+function pickCopyTarget(act) {
+  const curKey = act.character || '';
+  const curName = curKey || '当前角色';
+  const p = openModal({
+    title: '复制动作到',
+    body: `<div class="hint mb">把「${esc(act.name || '(未命名动作)')}」（${esc(curName)}，index ${act.index}）复制一份给哪个角色？</div>
+      <div class="hint mb">复制出来的动作除 index 按目标角色重新分配外，其它内容完全一致；动作名称里出现的角色标准名会改成目标角色的标准名（昵称不猜、原样保留）。</div>
+      <div class="rolelist" id="cpList" style="max-height:50vh"></div>`,
+    actions: [{ label: '取消', value: null }],
+  });
+  const renderList = (q) => {
+    const ql = String(q || '').trim().toLowerCase();
+    const rows = [];
+    for (const av of AVATARS) {
+      const isCur = (av.virtual ? '' : av.name) === curKey;
+      if (ql && !avatarHitAll(av, ql)) continue;
+      const mine = av.virtual ? act.character === '' : act.character === av.name;
+      rows.push(`<div class="roleitem">
+        ${elementDot(av.code)}<span class="nm">${esc(av.name)}${av.virtual ? ' <span class="dim">(character 留空)</span>' : ''}</span>
+        <span class="cnt">${av.virtual ? '编号 00' : avatarCodeLabel(av)} · ${actionsOf(state.strategy.actions, av.virtual ? '' : av.name).length} 条动作</span>
+        <button class="mini ${isCur ? '' : 'primary'}" data-cppick="${attr(av.virtual ? '' : av.name)}">${isCur ? '本角色（再复制一条）' : '复制给 TA'}</button>
+      </div>`);
+    }
+    $('cpList').innerHTML = rows.join('') || '<div class="empty">没有匹配的角色</div>';
+  };
+  const search = document.createElement('input');
+  search.id = 'cpSearch';
+  search.setAttribute('placeholder', '搜索角色名 / 编号');
+  search.style.width = '200px';
+  search.value = '';
+  search.oninput = () => renderList(search.value);
+  $('modalBody').insertBefore(search, $('cpList'));
+  $('cpList').onclick = (e) => {
+    const b = e.target.closest ? e.target.closest('[data-cppick]') : null;
+    if (!b) return;
+    closeModal({ character: b.getAttribute('data-cppick') || '' });
+  };
+  renderList('');
+  return p;
+}
+
+/** 把动作复制一份给指定角色（character 为空表示「当前角色」） */
+function duplicateActionTo(act, character) {
+  const target = character || '';
+  const r = addAction(target, act.type, { name: '', action: act.action, ensureCast: act.ensureCast });
+  if (!r.ok) { alert(r.error); return false; }
+  const na = r.action;
+  na.name = nextCopyName(renameForCharacter(act.name, act.character, target));
+  na.conditionText = act.conditionText;
+  na.tags = act.tags || '';
+  na.teammates = JSON.parse(JSON.stringify(act.teammates));
+  na.morePriorities = (act.morePriorities || []).map(mp => ({ ...mp, id: newId(), scope: { ...mp.scope } }));
+  state.ui.editingCharacter = target;
+  state.ui.collapsed[na.id] = false;
+  refresh(['actions', 'preview']);
+  return true;
 }
 
 function doSwap(id, dir) {
@@ -7556,9 +9483,53 @@ function editCondRow(t, sub) {
 
 /* ---------------- 字段处理 ---------------- */
 
+/**
+ * 把某个下拉回退成模型里的值（用于「改尾数 / 换类型被拒绝」之后）。
+ * 不回退的话，界面上还是那个没改成的值：
+ *   ① 用户看到的下拉和模型不一致；
+ *   ② 下一次「写回模型」会拿这个值再试一遍，同一条提示会弹两遍。
+ * 顺手把「上次渲染值 / 用户事件」两个基线也同步掉，否则它还会被当成一次新的用户改动。
+ */
+function revertFieldToModel(el, value) {
+  if (!el || !el.setAttribute) return;
+  const txt = value === undefined || value === null ? '' : String(value);
+  try { el.value = txt; } catch (e) { /* 某些类型不支持 */ }
+  try { el.setAttribute('data-rendered', txt); } catch (e) { /* 忽略 */ }
+  restampEditBaseline(el);
+}
+
 const actionsFieldHandlers = {
-  charlist: (i) => {
-    if (i.field === 'search') { state.ui.characterSearch = i.value; return true; }
+  cons: (i) => {
+    const a = state.strategy.actions.find(x => x.id === i.actionId);
+    if (!a) return false;
+    if (i.field === 'mode') {
+      const mode = CONS_MODES.includes(i.value) ? i.value : 'none';
+      if (mode === 'none') {
+        a.consMode = 'none'; a.consTarget = 0; a.consEnabled = false;
+      } else {
+        // 换模式时保持「这条动作在目标命座上来是启用还是停用」这个意图不变：
+        // 原来是「无命座要求」就按最自然的写法取值（达到命座开启 = 启用、达到命座关闭 = 停用）。
+        const wasReq = consHasRequirement(a);
+        const wasOn = !!a.consEnabled;     // 勾选状态（「按达到x命设置动作启用/停用」是否勾上）
+        a.consMode = mode;
+        if (!(Number(a.consTarget) > 0)) a.consTarget = 1;
+        a.consEnabled = wasReq ? wasOn : true;
+      }
+    } else if (i.field === 'target') {
+      const t = Number(i.value);
+      if (Number.isInteger(t) && t >= 1 && t <= CONS_MAX) a.consTarget = t;
+      if (a.consMode === 'none') a.consMode = 'open';
+    } else if (i.field === 'enabled') {
+      syncConsEnabled(a, !!i.value);
+    }
+    a.consRequirement = consRequirementOf(a);
+    // 命座要求直接参与 expression 的组成，必须重跑校验并刷新面板 / 预览 / 引用提示。
+    // 这里已经重建了面板，就不再返回 true —— 否则 onFieldChange 紧跟着还会再重建一次
+    // （同一次点击把整块面板换两遍，光标与选区白丢一次）。
+    refresh(['actions', 'preview']);
+    return false;
+  },
+  charlist: (i) => {    if (i.field === 'search') { state.ui.characterSearch = i.value; return true; }
     if (i.field === 'filterElement') { state.ui.filterElement = i.value; saveUi(); return true; }
     if (i.field === 'filterRarity') { state.ui.filterRarity = i.value; saveUi(); return true; }
     if (i.field === 'filterHasAction') { state.ui.filterHasAction = i.value; saveUi(); return true; }
@@ -7574,7 +9545,14 @@ const actionsFieldHandlers = {
         refreshLiveIssues();   // 动作名合法性/重名检查也实时显示在右侧校验面板
         return false;
       }
-      case 'ensureCast': a.ensureCast = !!i.value; return false;
+      case 'ensureCast': {
+        a.ensureCast = !!i.value;
+        // 「确保E技能释放成功」直接参与校验（勾了但没有 e 类指令会出警告、以及「按下没松开」等），
+        // 所以必须像改动作指令那样立刻重跑一次校验并刷新校验面板 / 头部徽标 / 卡片报错条：
+        // 只写模型不刷新的话，警告要等到重建面板（切页、重载草稿）才会出现或消失。
+        refreshLiveIssues();
+        return false;
+      }
       case 'tags': {
         a.tags = i.value;
         // 只就地把与注释有关的标记刷新掉，不重建面板（否则会打断输入法与光标）
@@ -7582,13 +9560,25 @@ const actionsFieldHandlers = {
         return false;
       }
       case 'type': {
+        const before = a.type;
         const r = changeActionType(a.id, Number(i.value));
-        if (!r.ok) { alert(r.error); return true; }
+        if (!r.ok) {
+          // 拒绝之后必须把界面回退成模型里的值：否则「重建面板前的写回」会拿这个没改成的值
+          // 再试一次，同一条提示就会弹两遍（而且用户看到的下拉会和模型不一致）。
+          revertFieldToModel(i.el, before);
+          alert(r.error);
+          return true;
+        }
         return 'refresh';
       }
       case 'slot': {
+        const before = a.slot;
         const r = moveActionToSlot(a.id, Number(i.value));
-        if (!r.ok) { alert(r.error); return true; }
+        if (!r.ok) {
+          revertFieldToModel(i.el, before);
+          alert(r.error);
+          return true;
+        }
         return 'refresh';
       }
       case 'action': {
@@ -7625,13 +9615,9 @@ const actionsFieldHandlers = {
     }
     return false;
   },
-  // 「添加其他触发条件」表单里的触发条件：草稿不写进模型，等点“添加”时才生成条目
-  morenewtext: (i) => {
-    if (!state.ui.newMoreText) state.ui.newMoreText = {};
-    state.ui.newMoreText[i.actionId] = i.value;
-    updateCondExplanation({ kind: 'morenew', id: i.actionId, idx: '', el: i.el });
-    return false;
-  },
+  // 「添加其他触发条件」表单里的触发条件输入框已移除（先添加条目、再在条目里编辑），
+  // 这里不再处理 morenewtext；保留分支是为了兼容旧草稿里可能残留的状态。
+  morenewtext: () => false,
   more: (i) => {
     const a = state.strategy.actions.find(x => x.id === i.actionId);
     const mp = a && a.morePriorities[Number(i.idx)];
@@ -7739,6 +9725,8 @@ function renderPreviewPanel() {
       <h3>模拟队伍过滤 <span class="hint">选满 4 名角色后，不在队伍中的角色动作会被剔除（与 BetterGI 开战前的过滤一致）</span></h3>
       <div class="row mb">
         <button class="mini" data-act="team-edit">选择 4 人队伍…</button>
+        <button class="mini" data-act="team-save">保存队伍</button>
+        <button class="mini" data-act="team-load">加载队伍</button>
         <button class="mini" data-act="team-clear">清空</button>
         ${teamFull ? '<span class="badge ok">过滤已生效</span>' : `<span class="badge warn">已选 ${team.length}/4，未生效</span>`}
       </div>
@@ -7746,6 +9734,7 @@ function renderPreviewPanel() {
         ${team.length ? team.map(n => `<span class="tag">${avatarLabel(n)}<button data-act="team-slot-remove" data-name="${attr(n)}">×</button></span>`).join('') : '<span class="dim">未选择</span>'}
       </div>
       ${teamFull ? `<div class="hint" style="margin-top:6px">此队伍也会在动作编辑页的“只看当前队伍”筛选中复用。</div>` : ''}
+      <div class="hint" style="margin-top:6px">「保存队伍 / 加载队伍」只把队伍的选择保存在浏览器本地（最多 ${MAX_TEAMS} 支），与战斗策略内容没有任何关联。</div>
     </div>
 
     <div class="card">
@@ -7804,6 +9793,124 @@ function renderPreviewPanel() {
     </div>`;
 }
 
+/* ---------------- 模拟队伍：本地保存 / 加载 ----------------
+ * 只保存「4 人队伍的选择」本身，与战斗策略内容没有任何关联；
+ * 队伍名只用于保存与在加载时区分不同队伍，不在「模拟队伍过滤」下方展示。
+ */
+
+/** 读取本地保存的队伍列表：[{ name, team: [角色名…] }]，最多 MAX_TEAMS 支 */
+function loadSavedTeams() {
+  let raw = null;
+  try { raw = localStorage.getItem(LS_TEAMS); } catch (e) { raw = null; }
+  if (!raw) return [];
+  let list = null;
+  try { list = JSON.parse(raw); } catch (e) { return []; }
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(x => x && typeof x.name === 'string' && Array.isArray(x.team))
+    .map(x => ({ name: x.name, team: x.team.filter(n => typeof n === 'string' && n).slice(0, 4) }))
+    .filter(x => x.name.trim() !== '' && x.team.length === 4)
+    .slice(0, MAX_TEAMS);
+}
+
+function saveSavedTeams(list) {
+  try { localStorage.setItem(LS_TEAMS, JSON.stringify((list || []).slice(0, MAX_TEAMS))); } catch (e) { /* 本地存储不可用时忽略 */ }
+}
+
+/** 「保存队伍」：已经选满 4 人时弹窗询问队伍名，否则提醒继续添加选择的角色 */
+function saveTeamDialog() {
+  const team = (state.ui.team || []).slice();
+  if (team.length !== 4) {
+    openModal({
+      title: '还不能保存队伍',
+      body: `<div class="warnbox">当前只选了 ${team.length} 名角色（${team.map(n => esc(n)).join('、') || '空'}）。请先点「选择 4 人队伍…」把 4 名角色都选满，再保存队伍。</div>
+        <div class="hint" style="margin-top:6px">保存队伍只记录这 4 名角色的选择，与战斗策略内容没有关联。</div>`,
+      actions: [{ label: '知道了', primary: true, value: null }],
+    });
+    return;
+  }
+  const saved = loadSavedTeams();
+  const full = saved.length >= MAX_TEAMS;
+  const p = openModal({
+    title: '保存队伍',
+    body: `<div class="hint mb">当前队伍：${team.map(n => avatarLabel(n)).join('、')}</div>
+      ${full ? `<div class="warnbox mb">本地已经保存了 ${MAX_TEAMS} 支队伍（上限）。请先在「加载队伍」的弹窗里删除一些，再保存新队伍。</div>` : ''}
+      <div class="row mb"><label class="f">队伍名 <input id="teamNameInput" style="width:260px" placeholder="例如：芙芙锄地队" ${full ? 'disabled' : ''}></label></div>
+      <div class="hint">队伍名只用于保存与在「加载队伍」时区分不同队伍，不会显示在「模拟队伍过滤」下方，也不会写进战斗策略。
+        ${saved.length ? `<br>同名队伍会被覆盖（当前本地已保存：${esc(saved.map(x => x.name).join('、'))}）。` : ''}</div>`,
+    actions: [{
+      label: '保存',
+      primary: true,
+      onClick: () => {
+        if (full) return 'keep';
+        const el = $('teamNameInput');
+        const name = String(el && el.value ? el.value : '').trim();
+        if (!name) { alert('请输入队伍名。'); return 'keep'; }
+        const list = loadSavedTeams();
+        const i = list.findIndex(x => x.name === name);
+        if (i >= 0) list[i] = { name, team };
+        else {
+          if (list.length >= MAX_TEAMS) { alert(`本地最多保存 ${MAX_TEAMS} 支队伍，请先删除一些。`); return 'keep'; }
+          list.push({ name, team });
+        }
+        saveSavedTeams(list);
+        openModal({
+          title: '已保存队伍',
+          body: `<div class="okbox">队伍「${esc(name)}」已保存到本地（当前共 ${list.length} 支）。</div>`,
+          actions: [{ label: '知道了', primary: true, value: null }],
+        });
+        return 'keep';
+      },
+    }, { label: '取消', value: null }],
+  });
+  return p;
+}
+
+/** 「加载队伍」：弹窗展示本地保存的队伍，选中一支就替换当前队伍；也可以就地删除 */
+function loadTeamDialog() {
+  const render = () => {
+    const list = loadSavedTeams();
+    const rows = list.length
+      ? list.map((x, i) => `<div class="roleitem">
+          <span class="nm">${esc(x.name)} <span class="dim">· ${x.team.map(n => esc(n)).join('、')}</span></span>
+          <button class="mini primary" data-team-load="${i}">加载</button>
+          <button class="mini danger" data-team-del="${i}">删除</button></div>`).join('')
+      : '<div class="empty">本地还没有保存过队伍</div>';
+    const body = `<div class="hint mb">选择一支队伍后，会用它替换「模拟队伍过滤」里当前选择的角色（保存的队伍只保存在浏览器本地，与战斗策略内容没有任何关联）。最多保存 ${MAX_TEAMS} 支。</div>
+      <div class="scroll">${rows}</div>`;
+    return { body, list };
+  };
+  let cur = render();
+  openModal({
+    title: '加载队伍（保存在本地）',
+    body: cur.body,
+    actions: [{ label: '关闭', primary: true, value: null }],
+  });
+  $('modalBody').onclick = (e) => {
+    const l = e.target.closest ? e.target.closest('[data-team-load]') : null;
+    const d = e.target.closest ? e.target.closest('[data-team-del]') : null;
+    if (l) {
+      const i = Number(l.getAttribute('data-team-load'));
+      const hit = cur.list[i];
+      if (!hit) return;
+      state.ui.team = hit.team.slice(0, 4);
+      saveUi();
+      closeModal(null);
+      refresh(['preview', 'actions']);
+      return;
+    }
+    if (d) {
+      const i = Number(d.getAttribute('data-team-del'));
+      if (i < 0 || i >= cur.list.length) return;
+      const list = cur.list.slice();
+      list.splice(i, 1);
+      saveSavedTeams(list);
+      cur = render();
+      $('modalBody').innerHTML = cur.body;
+    }
+  };
+}
+
 /* ---------------- 事件 ---------------- */
 
 const previewHandlers = {
@@ -7819,6 +9926,8 @@ const previewHandlers = {
       refresh(['preview', 'actions']);
     });
   },
+  'team-save': () => { saveTeamDialog(); },
+  'team-load': () => { loadTeamDialog(); },
   'team-clear': () => { state.ui.team = []; saveUi(); refresh(['preview', 'actions']); },
   'team-slot-remove': (t) => {
     state.ui.team = (state.ui.team || []).filter(n => n !== t.getAttribute('data-name'));
@@ -7840,6 +9949,10 @@ const app = {
   _saveTimer: null,
   _infoPending: false,   // 「策略名称 / 版本」有修改还没写进本地草稿（等用户改完再落盘）
   _lastJson: '',
+  _saving: false,        // 正在落盘（saveDraftNow）：期间不再排新的保存
+  _flushing: false,      // 正在把界面内容写回模型（flushDomToModel）
+  _flushDirty: false,    // 写回过程中确实改动了模型 → 写回结束后补排一次保存
+  _flushPanels: null,    // 写回过程中被挡下来的面板重建 → 写回结束后统一重建一次
   lastCondField: null,   // 最后一次聚焦的条件输入框（含光标位置）
   lastQcField: null,     // 最后一次聚焦的指令输入框（含光标位置）
   ime: false,            // 输入法是否正在组字
@@ -7942,20 +10055,32 @@ function pruneDraftDuplicates(drafts, key) {
   }
 }
 function saveDraftNow() {
-  const drafts = loadDrafts();
-  const key = draftKey();
-  drafts[key] = { time: Date.now(), json: buildJson() };
-  pruneDraftDuplicates(drafts, key);
-  // 只保留最近 30 份，避免 localStorage 溢出
-  const keys = Object.keys(drafts);
-  if (keys.length > 30) {
-    keys.sort((a, b) => (drafts[a].time || 0) - (drafts[b].time || 0));
-    for (const k of keys.slice(0, keys.length - 30)) delete drafts[k];
+  // 落盘前把界面上还没进入模型的编辑（尤其是最后一次编辑：可能还卡在中文输入法组字里）
+  // 先写回模型，再序列化 —— 草稿里不会再有“最后一次编辑的内容”。
+  // _saving 期间 markDirty 排不出新的保存：这次落盘写的就是写回之后的模型，不需要再来一次
+  // （否则会形成「保存 → 写回 → 再排一次保存 → …」的死循环）。
+  const prevSaving = app._saving;
+  app._saving = true;
+  try {
+    flushDomToModel();
+    syncCondTextareasFromModel();
+    const drafts = loadDrafts();
+    const key = draftKey();
+    drafts[key] = { time: Date.now(), json: buildJson() };
+    pruneDraftDuplicates(drafts, key);
+    // 只保留最近 30 份，避免 localStorage 溢出
+    const keys = Object.keys(drafts);
+    if (keys.length > 30) {
+      keys.sort((a, b) => (drafts[a].time || 0) - (drafts[b].time || 0));
+      for (const k of keys.slice(0, keys.length - 30)) delete drafts[k];
+    }
+    try { localStorage.setItem(LS_DRAFT, JSON.stringify(drafts)); } catch (e) { /* 忽略 */ }
+    state.ui.lastDraft = key;
+    app._infoPending = false;
+    saveUi();
+  } finally {
+    app._saving = prevSaving;
   }
-  try { localStorage.setItem(LS_DRAFT, JSON.stringify(drafts)); } catch (e) { /* 忽略 */ }
-  state.ui.lastDraft = key;
-  app._infoPending = false;
-  saveUi();
 }
 /** 有「策略名称 / 版本」的修改还没落盘 */
 function hasPendingInfoEdit() { return !!app._infoPending; }
@@ -7971,6 +10096,13 @@ function flushPendingInfoEdit() {
   renderFooter();
 }
 function markDirty(defer) {
+  // 写回（flushDomToModel）过程中产生的「改脏」不在当场排保存，记一笔、等写回结束后统一排一次：
+  // 否则「保存 → 写回 → 又排一次保存 → …」会变成一个永不停歇的保存循环（界面会被反复重建，
+  // 输入框的选中与光标每次都被清掉）。写回结束后模型已经是最新的，排一次就够。
+  if (app._flushing) { app._flushDirty = true; return; }
+  // 落盘（saveDraftNow）内部触发的改脏同理：这次落盘序列化的是写回之后的模型，已经包含这次改动，
+  // 不必也不能再排一次保存。
+  if (app._saving) return;
   if (defer) {
     app._infoPending = true;
     // 草稿键依赖「策略名称 + 版本」，所以在用户改完之前不能留下任何排队的保存：
@@ -7989,6 +10121,7 @@ function markDirty(defer) {
 
 function setTab(tab) {
   flushPendingInfoEdit();   // 切页也算“策略名称 / 版本改完了”（浏览器里失焦已经先触发过一次，这里是兜底）
+  flushPendingEdits();      // 切页会重建面板：把还在输入框里的条件内容先写回模型
   state.ui.tab = tab;
   saveUi();
   renderChrome();
@@ -7997,6 +10130,7 @@ function setTab(tab) {
 function renderActivePanel() {
   const p = app.panels[state.ui.tab];
   if (p && p.render) p.render();
+  stampRenderedPanels();
 }
 function renderAll() {
   state.lastIssues = validateStrategy();
@@ -8004,6 +10138,7 @@ function renderAll() {
   syncDetailsState();
   renderChrome();
   renderActivePanel();
+  stampRenderedPanels();
   renderSide();
 }
 function rebuildIndexes() {
@@ -8011,32 +10146,315 @@ function rebuildIndexes() {
   state.strategy.actions.sort((a, b) => a.index - b.index);
 }
 function refresh(panels) {
+  // 写回（flushDomToModel）过程中不允许重建面板：写回是「保存 / 切页 / 点别的控件」顺带做的事，
+  // 在用户还可能正在输入的时候把面板整个换掉，就会把光标、选区、滚动位置一起清掉。
+  // 这里只记下「哪几个面板需要重建」，等写回结束后统一重建一次。
+  if (app._flushing) {
+    if (!app._flushPanels) app._flushPanels = new Set();
+    for (const t of (panels || [state.ui.tab])) app._flushPanels.add(t);
+    return;
+  }
   state.lastIssues = validateStrategy();
   rebuildIndexes();
   syncDetailsState();
+  const scroll = captureScroll();
   renderChrome();
   const list = panels || [state.ui.tab];
   for (const t of list) if (app.panels[t] && app.panels[t].render) app.panels[t].render();
+  stampRenderedPanels();
+  restoreScroll(scroll);
   renderSide();
   markDirty();
 }
+/** 拿一个表单元素的当前值（checkbox 取勾选状态），与 ctrlValue 一致 */
+function domFieldValue(el) {
+  return el.type === 'checkbox' ? !!el.checked : el.value;
+}
+
+/* ---------------- 「上次渲染进 DOM 的值」 ----------------
+ * 面板重建（innerHTML）之后，新节点上的 value 是渲染那一刻的模型值。
+ * 把它记在 data-rendered 上，写回模型时就有了“上次显示的是什么”这个基线：
+ * 于是可以把「用户真的改了这个下拉」与「重建 / 浏览器把下拉的值挪了位置」区分开
+ * —— 前者才该写回模型（并触发像「尾数冲突」这样的用户级提示）。
+ */
+const RENDERED_ATTR = 'data-rendered';
+
+/** 读某个控件上次渲染进 DOM 的值（没有记录时返回 undefined） */
+function renderedValueOf(el) {
+  if (!el || !el.getAttribute || !el.hasAttribute) return undefined;
+  return el.hasAttribute(RENDERED_ATTR) ? el.getAttribute(RENDERED_ATTR) : undefined;
+}
+
+/** 现在 DOM 里新渲染出来的控件都补上「上次渲染值」基线 */
+function stampRenderedValues(root) {
+  if (!root || !root.querySelectorAll) return;
+  const list = root.querySelectorAll('[data-kind]');
+  if (list && list.forEach) list.forEach(stampRenderedValue);
+}
+/** 渲染（或重建）之后：控件上「用户改过」的痕迹要重新计，之前那批控件的痕迹不再作数 */
+function stampRenderedValue(el) {
+  if (!el || !el.setAttribute) return;
+  // 基线必须与 fieldValueOf / modelFieldValue 用同一套取值口径：
+  // 勾选框要比的是 checked（不是 value —— 浏览器里勾选框的 value 恒为 "on"），
+  // 否则每次写回都会把「勾选框」判成「用户改过」，进而反复触发重建与保存。
+  let v;
+  try { v = domFieldValue(el); } catch (e) { v = el.value; }
+  try {
+    el.setAttribute(RENDERED_ATTR, String(v === null || v === undefined ? '' : v));
+    el.setAttribute(EDIT_ATTR, String(editEventSeq));
+  } catch (e) { /* 忽略 */ }
+}
+
+/* ---------------- 「这个控件上是用户改的」 ----------------
+ * 只有真的在控件上派发过 input / change（或输入法组字）事件，才认为这次变化来自用户。
+ * 用处：写回模型前，如果发现「下拉的值与模型 / 上次渲染值都不一样、但这个控件从来没收到过任何事件」，
+ * 那它就不是用户在改，而是重建面板 / 浏览器顺手把下拉的值挪了位置 —— 这时**恢复成模型里的值**，
+ * 而不是把这次意外变化当成用户操作写进模型（那会误报「尾数已被占用」甚至改动编号）。
+ * 文本输入框不参与这个判断：中文输入法组字期间 input 事件可能迟到，不能因此丢掉用户的输入。
+ */
+let editEventSeq = 0;
+const lastEditEvent = new WeakMap();
+const EDIT_ATTR = 'data-edited-at';
+
+/** 记录「这个控件刚收到了用户事件」 */
+function markUserEdit(el) {
+  if (!el || typeof el !== 'object') return;
+  try { lastEditEvent.set(el, ++editEventSeq); } catch (e) { /* 不可作为键时忽略 */ }
+}
+/** 这个控件自「上次渲染 / 上次写回」以来有没有收到过用户事件 */
+function hasUserEditSince(el) {
+  if (!el || typeof el !== 'object') return false;
+  const t = Number(el.getAttribute ? el.getAttribute(EDIT_ATTR) : NaN);
+  const ev = lastEditEvent.get(el);
+  if (!ev) return false;
+  return !Number.isFinite(t) || ev > t;
+}
+/** 渲染 / 写回之后，把「用户事件」的基准时间同步到当前 */
+function restampEditBaseline(el) {
+  if (!el || !el.setAttribute) return;
+  try { el.setAttribute(EDIT_ATTR, String(editEventSeq)); } catch (e) { /* 忽略 */ }
+}
+
+/** 模型里这个字段现在的值 */
+function modelFieldValue(kind, id, field, idx, sub) {
+  if (kind === 'act') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    if (!a) return undefined;
+    if (field === 'tags') return a.tags || '';
+    if (field === 'type' || field === 'slot' || field === 'ensureCast') return a[field];
+    return a[field];
+  }
+  if (kind === 'cons') {
+    // 命座要求的三个控件（模式 / 目标命座数 / 启用-停用勾选框）。
+    // 没有这个分支时 modelFieldValue 恒为 undefined，勾选框会被判成「永远和模型不一样」，
+    // 于是每次写回都要重建面板并再排一次保存 —— 就是那个不停歇的保存循环的源头。
+    const a = state.strategy.actions.find(x => x.id === id);
+    if (!a) return undefined;
+    const has = consHasRequirement(a);
+    if (field === 'mode') return has ? a.consMode : 'none';
+    if (field === 'target') return has ? String(Number(a.consTarget)) : '';
+    if (field === 'enabled') return consActiveState(a);
+    return undefined;
+  }
+  if (kind === 'pre') {
+    const pa = (state.strategy.info.preActions || [])[Number(idx)];
+    return pa ? (pa[field] || '') : undefined;
+  }
+  if (kind === 'condtext') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    return a ? (a.conditionText || '') : undefined;
+  }
+  if (kind === 'moretext') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    const mp = a && a.morePriorities[Number(idx)];
+    return mp ? (mp.text || '') : undefined;
+  }
+  if (kind === 'morenewtext') return (state.ui.newMoreText || {})[id];
+  if (kind === 'more') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    const mp = a && a.morePriorities[Number(idx)];
+    if (!mp) return undefined;
+    if (field === 'cmp') return mp.cmp;
+    if (field === 'stype') return mp.scope ? mp.scope.type : null;
+    if (field === 'selement') return mp.scope ? mp.scope.element : null;
+    if (field === 'scharacter') return mp.scope ? mp.scope.character : null;
+    return undefined;
+  }
+  if (kind === 'team') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    if (!a) return undefined;
+    // 「新增角色前用：」的运算符：值存在 state.ui.teamFilterOps 里（键是 动作id:字段名）
+    if (field === 'newOp') return ((state.ui.teamFilterOps || {})[`${id}:${sub}`]) === 'and' ? 'and' : 'or';
+    // 「自动排除」勾选框：界面上是按「是否勾了这条其他动作」算出来的（见 renderCardTeamTab），
+    // 模型里存的却是一个 id 数组 —— 直接拿数组去比会永远「不一致」，于是每次写回都要重写一遍模型，
+    // 连带在「只是切个页 / 选个角色」的时候也排一次草稿保存。这里按界面那套算法给出真正的勾选状态。
+    if (field === 'autoExclude') {
+      const o = state.strategy.actions.find(x => x.id === sub && x.id !== a.id);
+      if (!o || (o.character || '') !== (a.character || '')) return false;
+      const listed = (a.teammates.autoExclude || []).includes(o.id);
+      const bySameType = !!a.teammates.autoExcludeSameType && o.type === a.type && (o.teammates.include || []).length > 0;
+      return listed || bySameType;
+    }
+    return a.teammates[field];
+  }
+  if (kind === 'charlist') return state.ui[field];
+  return undefined;
+}
+
+/** 界面上这个控件的值换算成「与模型同类型」的值（下拉里的数字要与模型里的数字比，不能按字符串比） */
+function fieldValueOf(kind, field, el) {
+  const v = domFieldValue(el);
+  if (typeof v !== 'string') return v;
+  if (kind === 'act' && (field === 'type' || field === 'slot')) return Number(v);
+  if (kind === 'more' && field === 'stype') return v === '' ? null : Number(v);
+  if (kind === 'more' && field === 'selement') return v === '' ? null : Number(v);
+  return v;
+}
+
+/** 两个「控件值 / 模型值」是否算同一个值（null / undefined / 空串一律视为「空」，其余按字符串比） */
+function sameFieldValue(a, b) {
+  const na = (a === undefined || a === null) ? '' : String(a);
+  const nb = (b === undefined || b === null) ? '' : String(b);
+  return na === nb;
+}
+
+/**
+ * 这个控件的内容与模型不一致吗（一致就不必写回，避免无谓的重算与排序）。
+ *
+ * 基线优先取「上次渲染进这个 DOM 节点的值」（见 RENDERED_ATTR）：与模型比本来也等价，
+ * 但控件被重建过之后，模型可能已经变了而新节点上还挂着旧值 —— 用「上次显示的是什么」当基线，
+ * 才能分辨出「用户真的改了下拉」和「重建 / 浏览器把下拉的值挪了位置」，
+ * 免得后者被当成用户操作（例如把「尾数」下拉的意外变化当成“用户要改尾数”而弹出冲突提示）。
+ */
+function fieldDiffers(kind, id, field, idx, el) {
+  const rendered = renderedValueOf(el);
+  const next = fieldValueOf(kind, field, el);
+  const sub = (el && el.getAttribute) ? (el.getAttribute('data-sub') || '') : '';
+  const cur = rendered === undefined ? modelFieldValue(kind, id, field, idx, sub) : rendered;
+  return !sameFieldValue(cur, next);
+}
+
+/** 这些字段由 input 事件即时写进模型（且已经带了各自的就地刷新逻辑），兜底时只同步条件文本 */
+const FLUSH_SKIP_FIELDS = new Set(['text', 'avatarSearch', 'search']);
+
+/**
+ * 输入框 / 下拉里的内容写回模型（模型是唯一事实来源）。
+ *
+ * 「最后一次编辑的内容」之所以会丢，根因就在这里：以前只有**正在聚焦的那个条件输入框**
+ * 会在重建面板前被写回模型（flushPendingEdits），而落盘（saveDraftNow）走的是模型 ——
+ * 一旦最近一次编辑没有及时写进模型（中文输入法组字期间 document 级的 input 被挂起、
+ * input 事件迟到，或者最后一次改动正好落在“重建面板 / 落盘”的瞬间），那次改动就只留在
+ * DOM 里：草稿里没有、界面重建后又按模型刷新回去，看起来就是“最后一次编辑消失了”。
+ * 所以这里逐个对齐：**内容与模型不同的才写**（没变就不碰，免得白白触发重算/重建排序），
+ * 写的过程不触发任何重绘，输入法与光标都不受影响。
+ * 范围限定在三个面板元素里（而不是整份 document）：既不漏掉别的页签上还没写回模型的编辑，
+ * 也不会去碰弹窗、指令快捷面板这些自己管理状态的控件。
+ */
+function flushDomToModel() {
+  if (typeof document === 'undefined') return;
+  if (app._flushing) return;               // 防重入：写回过程中不再嵌套一次写回
+  const panes = ['paneInfo', 'paneActions', 'panePreview']
+    .map(id => (typeof $ === 'function' ? $(id) : null))
+    .filter(el => el && el.querySelectorAll);
+  const roots = panes.length ? panes : [document];
+  app._flushing = true;
+  app._flushDirty = false;
+  app._flushPanels = null;
+  try {
+    for (const scope of roots) {
+      scope.querySelectorAll('[data-kind]').forEach((el) => {
+        flushOneField(el);
+      });
+    }
+  } finally {
+    app._flushing = false;
+  }
+  const panels = app._flushPanels;
+  const dirty = app._flushDirty;
+  app._flushPanels = null;
+  app._flushDirty = false;
+  // 写回过程中被挡下来的重建：放在写回结束之后统一做一次（不会再被写回打断）
+  if (panels && panels.size) refresh([...panels]);
+  // 写回确实改动了模型（最后一次编辑还没进模型）→ 补排一次保存。
+  // 落盘内部（_saving）不需要补排：这次落盘序列化的就是写回之后的模型。
+  if (dirty) markDirty(false);
+}
+
+/** 把单个控件的内容按需写回模型 */
+function flushOneField(el) {
+  if (!el || !el.getAttribute) return;
+  if (el.disabled) return;   // 禁用控件用户改不了，写回没有意义（还会把「占位显示值」当成用户选择）
+  if (typeof inInfoKeyField === 'function' && inInfoKeyField(el)) return;   // 名称 / 版本按「改完再落盘」的规则走
+  const kind = el.getAttribute('data-kind');
+  const h = app.fieldHandlers[kind];
+  if (!h) return;
+  const field = el.getAttribute('data-field') || '';
+  const id = el.getAttribute('data-id') || '';
+  const idx = el.getAttribute('data-idx') || '';
+  if (kind === 'info') return;                                              // 信息页各字段都是即时入模型的
+  if (kind === 'pre' && FLUSH_SKIP_FIELDS.has(field)) return;
+  if (kind !== 'pre' && FLUSH_SKIP_FIELDS.has(field)) {
+    // 条件输入框（condtext / moretext / morenewtext 的 text）：写回模型后顺手就地刷新释义
+    if ((kind === 'condtext' || kind === 'moretext' || kind === 'morenewtext') && fieldDiffers(kind, id, field, idx, el)) {
+      writeCondText(kind, id, idx, el.value);
+      if (typeof updateCondExplanation === 'function') {
+        updateCondExplanation({ kind: kind === 'moretext' ? 'more' : (kind === 'morenewtext' ? 'morenew' : 'cond'), id, idx, el });
+      }
+    }
+    return;
+  }
+  if (!fieldDiffers(kind, id, field, idx, el)) return;
+  // 下拉（select）的值与模型 / 上次渲染值都不同，但这个控件从来没收到过 input / change：
+  // 这不是用户在改，而是重建面板 / 浏览器把值挪了位置（例如「尾数」下拉被挪成了别的值）。
+  // 这时把界面恢复成模型里的值，绝不写回模型 —— 否则会误报「尾数已被占用」，甚至改掉编号。
+  const tag = String(el.tagName || '').toUpperCase();
+  if (tag === 'SELECT' && !hasUserEditSince(el)) {
+    const want = modelFieldValue(kind, id, field, idx, el.getAttribute('data-sub') || '');
+    const txt = (want === undefined || want === null) ? '' : String(want);
+    if (el.value !== txt) {
+      try { el.value = txt; } catch (e) { /* 某些类型不支持 */ }
+    }
+    return;
+  }
+  h({ kind, actionId: id, field, idx, sub: el.getAttribute('data-sub') || '', value: domFieldValue(el), el }, false);
+  // 这次变化已经处理过了（写进模型，或因为冲突被拒绝、界面上也回退/修正过）：
+  // 把基线与当前显示值对齐，免得同一个值在下一次写回时被当成「用户又改了一次」而重复提示
+  // （典型的重复提示：改尾数撞车时，「尾数 N 已被占用」会弹两遍）。
+  if (el.setAttribute) {
+    try { el.setAttribute(RENDERED_ATTR, String(domFieldValue(el))); } catch (e) { /* 忽略 */ }
+  }
+  restampEditBaseline(el);
+}
+
 /** 重建面板前：把正在编辑、但还没写进模型的内容先存下来，避免输入被重建后的 DOM 覆盖掉 */
 function flushPendingEdits() {
-  const el = document.activeElement;
+  flushDomToModel();
+  const el = typeof document !== 'undefined' ? document.activeElement : null;
   if (!el || !el.getAttribute) return;
   if (typeof flushCondTextarea === 'function') flushCondTextarea(el);
 }
 
 function rerenderCurrent(keepFocus) {
-  flushPendingEdits();
+  // 先记下焦点与滚动位置，再写回：写回本身（以及它可能触发的延迟重建）会把旧 DOM 换掉，
+  // 事后再取就只能取到「已经归零」的位置（角色列表看起来就“弹回了顶部”）。
   const snap = keepFocus ? captureFocus() : null;
   const scroll = captureScroll();
+  flushPendingEdits();
   const p = app.panels[state.ui.tab];
   if (p && p.render) p.render();
+  stampRenderedPanels();
   restoreScroll(scroll);
   renderChrome();
   renderSide();
   if (snap) restoreFocus(snap);
+}
+
+/** 重建面板之后，把刚渲染出来的控件都打上「上次渲染值」基线（见 RENDERED_ATTR） */
+function stampRenderedPanels() {
+  if (typeof document === 'undefined') return;
+  stampRenderedValues(document.getElementById('paneInfo'));
+  stampRenderedValues(document.getElementById('paneActions'));
+  stampRenderedValues(document.getElementById('panePreview'));
 }
 
 /** 记住可滚动容器（如角色列表）的滚动位置，重建 DOM 后原样恢复，避免列表跳到最顶 */
@@ -8129,8 +10547,9 @@ function updateCardIssues() {
   document.querySelectorAll('[data-cardsummary]').forEach(el => {
     const a = state.strategy.actions.find(x => x.id === el.getAttribute('data-cardsummary'));
     if (!a) return;
-    const cond = (a.conditionText || '').trim();
-    el.textContent = cond || '（无条件=恒真）';
+    // 卡片标题旁显示的是这条动作的**动作指令串**（触发条件表达式在「触发条件」区块标题旁）
+    const cmd = String(a.action || '').trim();
+    el.textContent = cmd || '（空指令）';
   });
   // 「编号（自动）」下面的引用注释也可能因为别处的条件改动而变化，跟着一起刷新
   document.querySelectorAll('[data-refnote]').forEach(el => {
@@ -8291,10 +10710,10 @@ function bindEvents() {
   });
 
   // 关页 / 跳转时兜底落盘：这不是「光标离开输入框」的判定（组字过程中不会触发），
-  // 只是避免「输完名称就直接关掉页面」时那一次名称 / 版本改动丢掉。
+  // 只是避免「输完就关掉页面」时那一次改动丢掉 —— 包括还没到 600ms 定时器的编辑，
+  // 以及最后一次编辑还停在输入法组字里、没写进模型的情况。
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('beforeunload', () => {
-      if (!app._infoPending) return;
       clearTimeout(app._saveTimer);
       app._saveTimer = null;
       saveDraftNow();
@@ -8338,6 +10757,9 @@ function clickLeftInfoKeyField(target) {
 function onFieldChange(el, isInput) {
   const kind = el.getAttribute && el.getAttribute('data-kind');
   if (!kind) return;
+  // 走到这里说明是控件上真的派发了 input / change（含输入法组字结束补的那次），记一笔：
+  // flushDomToModel 靠它区分「用户在改」与「重建面板把值挪了位置」（见 hasUserEditSince）。
+  markUserEdit(el);
   const info = {
     kind,
     actionId: el.getAttribute('data-id') || '',
@@ -8757,11 +11179,27 @@ function mergeSummaryHtml(r, plan, src, fname) {
 
 /* ---------------- 新建 / 草稿 ---------------- */
 
+/**
+ * 新建策略。
+ *   'blank'  —— 空白策略（只有 info，没有任何动作；导出前必须自己加动作）；
+ *   其它值   —— 「新建（含兜底动作）」：一次性建好 3 条动作（都在「当前角色」下），
+ *               顺序固定为「兜底战斗检查 → 角色红血标记 → 等待」：
+ *               ① 兜底战斗检查：类型 0，指令 check,scroll(10)，条件 t>10 && last-check>4 && (!(last-check=t) || count<1)；
+ *               ② 角色红血标记：类型 0，不写指令（只做判定 / 标记），条件 low-hp && since>4；
+ *               ③ 等待：类型 9，指令 wait(0.2)，主条件恒假 + 一条 priority=100000 的恒真其他触发条件（兜底空转）。
+ *               两条类型 0 的动作都依赖「当前角色 + 类型 0 允许只写条件不写指令」这条规则。
+ */
 function newStrategy(preset) {
   const s = { info: { name: '', author: '', version: '', description: '', config: {}, preActions: [] }, actions: [] };
   state.strategy = s;
   if (preset !== 'blank') {
-    // 预置兜底等待：主条件恒假，morePriorities 里留一条恒真、次于整个类型 9（priority=100000）
+    // ① 兜底战斗检查
+    const check = addAction('', 0, { name: '兜底战斗检查', action: 'check,scroll(10)' });
+    if (check.ok) check.action.conditionText = 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )';
+    // ② 角色红血标记（只做判定 / 标记，不写指令）
+    const mark = addAction('', 0, { name: '角色红血标记', action: '' });
+    if (mark.ok) mark.action.conditionText = 'low-hp && since > 4';
+    // ③ 兜底等待：主条件恒假，morePriorities 里留一条恒真、次于整个类型 9（priority=100000）
     const r = addAction('', 9, { name: '等待', action: 'wait(0.2)' });
     if (r.ok) {
       r.action.conditionText = 'false';

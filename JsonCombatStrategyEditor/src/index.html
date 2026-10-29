@@ -91,8 +91,13 @@ tr:hover td{background:#1d2128}
 .actioncard{background:var(--bg2);border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:8px;margin-bottom:10px}
 .actioncard.err{border-left-color:var(--err)}
 .actioncard.warn{border-left-color:var(--warn)}
-.actioncard .hd{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;flex-wrap:wrap}
-.actioncard .hd .nm{font-weight:600}
+/* 卡片标题栏一行放完：动作指令超长时截断（不换行），否则右侧的「复制 / 删除」等按钮会被顶到第三行 */
+.actioncard .hd{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;flex-wrap:nowrap;min-width:0}
+.actioncard .hd .nm{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 指令内容：占满中间的剩余宽度，超长就省略号截断；完整内容展开「动作指令」区块可见，
+   鼠标悬停也有原生 title 提示（hover 拿到的是完整的指令串） */
+.actioncard .hd .cardsummary{flex:1 1 160px;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.actioncard .hd>button,.actioncard .hd>[data-cardbadges],.actioncard .hd>.pill,.actioncard .hd>span[data-tagspill]{flex:none}
 .actioncard .bd{padding:0 10px 10px;border-top:1px solid var(--line)}
 details.det{margin:8px 0;padding:2px 0}
 details.det>summary{font-weight:600;color:var(--fg);padding:4px 0;border-bottom:1px solid var(--line);margin-bottom:6px}

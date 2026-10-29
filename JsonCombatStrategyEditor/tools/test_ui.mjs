@@ -3,10 +3,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { readSources, findSampleJson } from './build.mjs';
+import { readSources, findSampleJson, root } from './build.mjs';
 import { createDom } from './dom.mjs';
 
 const dom = createDom();
+/**
+ * 全局的 alert 收集器：编辑器里的 alert 一律进这里。
+ * 以前各个用例会临时把 ctx.alert 换成自己的数组、跑完再换回去；
+ * 只要有一处忘了还原（或者嵌套两层），后面的用例就收不到自己那次的提示，
+ * 断言就会莫名其妙地失败。所以改成「所有提示都进同一个数组」，用例自己记下开跑前的长度来分段。
+ */
+const alertLog = [];
 const ctx = {
   console,
   window: dom.window,
@@ -14,11 +21,13 @@ const ctx = {
   localStorage: dom.localStorage,
   Blob: class { constructor() { } },
   FileReader: class { readAsText() { } },
-  alert: (m) => { console.log('  [alert] ' + String(m).slice(0, 200)); },
+  alert: (m) => { alertLog.push(String(m)); console.log('  [alert] ' + String(m).slice(0, 200)); },
   confirm: () => true,
   setTimeout, clearTimeout, setInterval, clearInterval,
   URL: dom.window.URL,
 };
+/** 从 alertLog 的 from 位置开始，本次新出现的提示 */
+const alertsSince = (from) => alertLog.slice(from);
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 
@@ -28,13 +37,14 @@ vm.runInContext(src, ctx);
 const g = (c) => vm.runInContext(c, ctx);
 
 let failures = 0;
+const T0 = Date.now();
 function check(name, fn) {
   try {
     const r = fn();
-    console.log(`✔ ${name}${r ? ' — ' + r : ''}`);
+    console.log(`✔ [${Date.now() - T0}ms] ${name}${r ? ' — ' + r : ''}`);
   } catch (e) {
     failures++;
-    console.log(`✘ ${name}\n   ${e && e.stack ? e.stack.split('\n').slice(0, 4).join('\n   ') : e}`);
+    console.log(`✘ [${Date.now() - T0}ms] ${name}\n   ${e && e.stack ? e.stack.split('\n').slice(0, 4).join('\n   ') : e}`);
   }
 }
 
@@ -72,15 +82,16 @@ check('侧栏校验面板渲染', () => {
   return html.length + ' 字符';
 });
 
-check('预置兜底等待动作', () => {
+check('预置兜底动作（3 条：兜底战斗检查 → 角色红血标记 → 等待）', () => {
   const acts = g('state').strategy.actions;
-  if (!acts.length) throw new Error('没有预置动作');
-  const a = acts[0];
-  if (a.type !== 9) throw new Error('预置动作类型应为 9，实际 ' + a.type);
-  if (a.index !== 90001) throw new Error('预置动作 index 应为 90001，实际 ' + a.index);
+  if (acts.length !== 3) throw new Error('预设应包含 3 条动作，实际 ' + acts.length + '：' + acts.map(a => a.name).join('，'));
+  const a = acts[acts.length - 1];
+  if (a.type !== 9) throw new Error('兜底等待动作类型应为 9，实际 ' + a.type);
+  if (a.index !== 90001) throw new Error('兜底等待动作 index 应为 90001，实际 ' + a.index);
   if (a.conditionText !== 'false') throw new Error('预置主条件应为 false');
   const mp = a.morePriorities[0];
   if (!mp || mp.priority !== 100000) throw new Error('预置额外条件 priority 应为 100000');
+  if (acts[0].name !== '兜底战斗检查' || acts[1].name !== '角色红血标记') throw new Error('前两条预设动作不对：' + acts.map(x => x.name).join('，'));
   return JSON.stringify({ index: a.index, cond: a.conditionText, mp: mp.priority });
 });
 
@@ -331,30 +342,42 @@ const qcInsert = (id, mode) => {
   qcDisp(b, 'click');
 };
 
-check('界面：快捷插入指令面板（点按q技能）', () => {
+check('界面：快捷插入指令（无参数 / 带参数 / 空参数自动省略括号与逗号 / 词条默认值）', () => {
   const a = g('state').strategy.actions.find(x => x.name === '芙宁娜-q');
-  a.action = '';
-  $('paneActions').innerHTML = qcRender(a.id);
-  g('bindQuickCommandPanels')();
-  qcPick(a.id, '点按q技能');
+  /** 重新渲染这一条动作的指令编辑区，并选中一个词条（先清掉上一次的选择：再点同一个词条会变成取消选择） */
+  const open = (word) => {
+    a.action = '';
+    delete g('state').qc[a.id];
+    $('paneActions').innerHTML = qcRender(a.id);
+    g('bindQuickCommandPanels')();
+    qcPick(a.id, word);
+  };
+  // ① 无参数词条：直接插进完整指令
+  open('点按q技能');
   qcInsert(a.id, 'replace');
-  if (a.action !== 'q,wait(0.1),ready') throw new Error('插入结果不对：' + JSON.stringify(a.action));
-  return a.action;
-});
-
-check('界面：快捷插入指令面板（带参数，连续普攻）', () => {
-  const a = g('state').strategy.actions.find(x => x.name === '芙宁娜-q');
-  a.action = '';
-  $('paneActions').innerHTML = qcRender(a.id);
-  g('bindQuickCommandPanels')();
-  qcPick(a.id, '连续普攻');
+  if (a.action !== 'q,wait(0.1),ready') throw new Error('无参数词条插入结果不对：' + JSON.stringify(a.action));
+  // ② 带参数词条：填了参数就带上括号
+  open('连续普攻');
   const p0 = qcPanel(a.id).querySelector('[data-cqp="0"]');
   if (!p0) throw new Error('缺少参数输入框');
   p0.value = '1.2';
   qcDisp(p0, 'input');
   qcInsert(a.id, 'append');
-  if (a.action !== 'attack(1.2)') throw new Error('插入结果不对：' + a.action);
-  return a.action;
+  if (a.action !== 'attack(1.2)') throw new Error('带参数插入结果不对：' + a.action);
+  // ③ 参数留空：省略括号与逗号
+  open('连续普攻');
+  const p1 = qcPanel(a.id).querySelector('[data-cqp="0"]');
+  p1.value = '';
+  qcDisp(p1, 'input');
+  qcInsert(a.id, 'replace');
+  if (a.action !== 'attack') throw new Error('空参数应省略括号：' + JSON.stringify(a.action));
+  // ④ 有默认值的参数（「移动」默认朝前 w）
+  open('移动');
+  const dir = qcPanel(a.id).querySelector('[data-cqp="0"]');
+  if (!dir || dir.value !== 'w') throw new Error('「移动」的默认方向应为前 w，实际 ' + (dir && dir.value));
+  qcInsert(a.id, 'replace');
+  if (a.action !== 'walk(w,0.2)') throw new Error('移动插入结果不对：' + a.action);
+  return 'q,wait(0.1),ready / attack(1.2) / attack / walk(w,0.2)';
 });
 
 check('界面：快捷插入指令的按键图（就地展开，不再弹窗）', () => {
@@ -373,28 +396,6 @@ check('界面：快捷插入指令的按键图（就地展开，不再弹窗）'
   if (!p0 || p0.value !== 'VK_LBUTTON') throw new Error('点击按键图未填入：' + (p0 && p0.value));
   qcInsert(a.id, 'replace');
   if (a.action !== 'keypress(VK_LBUTTON)') throw new Error('按键插入结果不对：' + a.action);
-  return a.action;
-});
-
-check('界面：快捷插入指令（空参数时自动省略括号与逗号）', () => {
-  const a = g('state').strategy.actions.find(x => x.name === '芙宁娜-q');
-  a.action = '';
-  $('paneActions').innerHTML = qcRender(a.id);
-  g('bindQuickCommandPanels')();
-  qcPick(a.id, '连续普攻');
-  const p0 = qcPanel(a.id).querySelector('[data-cqp="0"]');
-  p0.value = '';
-  qcDisp(p0, 'input');
-  qcInsert(a.id, 'replace');
-  if (a.action !== 'attack') throw new Error('空参数应省略括号：' + JSON.stringify(a.action));
-  a.action = '';
-  $('paneActions').innerHTML = qcRender(a.id);
-  g('bindQuickCommandPanels')();
-  qcPick(a.id, '移动');
-  const dir = qcPanel(a.id).querySelector('[data-cqp="0"]');
-  if (!dir || dir.value !== 'w') throw new Error('「移动」的默认方向应为前 w，实际 ' + (dir && dir.value));
-  qcInsert(a.id, 'replace');
-  if (a.action !== 'walk(w,0.2)') throw new Error('移动插入结果不对：' + a.action);
   return a.action;
 });
 
@@ -522,46 +523,6 @@ check('界面：快捷添加条件的运算符插入（光标位置 / 末尾）'
   box = dom.document.querySelector('[data-cfbox="cond:' + a.id + '"]');
   if (!box.querySelector('[data-cfpos="append"]').classList.contains('on')) throw new Error('插入位置没有保留为“末尾”');
   return a.conditionText;
-});
-
-check('界面：添加其他触发条件能带入手输的触发条件', () => {
-  const a = g('state').strategy.actions.find(x => x.name === '芙宁娜-q2');
-  a.morePriorities.length = 0;
-  g('renderActionsPanel')();
-  const ta = dom.document.querySelector('textarea[data-cond-ref="morenew:' + a.id + '"]');
-  if (!ta) throw new Error('找不到「添加其他触发条件」的条件输入框');
-  ta.value = 'low-hp';
-  g('onFieldChange')(ta, true);
-  // 判定范围用表单自己的下拉选择（不再用全局 id，多张卡片互不干扰）
-  const pickType = (v) => {
-    const form = dom.document.querySelector('[data-moreaddform="' + a.id + '"]');
-    if (!form) throw new Error('找不到「添加其他触发条件」的判定范围表单');
-    const sel = form.querySelector('[data-na="type"]');
-    sel.value = v;
-    form.dispatch('change', { target: sel });
-  };
-  pickType('5');
-  clickAct('more-add2', { 'data-id': a.id });
-  const mp = a.morePriorities[a.morePriorities.length - 1];
-  if (!mp) throw new Error('没有添加出其他触发条件');
-  if (mp.text !== 'low-hp') throw new Error('其他触发条件未带入手输内容：' + JSON.stringify(a.morePriorities));
-  if (mp.priority !== 60000) throw new Error('priority 应为次于爆发的 60000，实际 ' + mp.priority);
-  // 判定范围的选择要保留（不能因为重建面板就被重置）
-  const form2 = dom.document.querySelector('[data-moreaddform="' + a.id + '"]');
-  if (form2.querySelector('[data-na="type"]').value !== '5') throw new Error('添加后判定范围被重置了');
-  // 再用“快捷添加条件”拼一条
-  const box = dom.document.querySelector('[data-cfbox="morenew:' + a.id + '"]');
-  if (!box) throw new Error('「添加其他触发条件」里没有快捷添加条件面板');
-  const sel = box.querySelector('[data-cfp="fn"]');
-  sel.value = 'q-ready';
-  sel.dispatch('change');
-  box.querySelector('[data-cf="insend"]').dispatch('click');
-  const ta2 = dom.document.querySelector('textarea[data-cond-ref="morenew:' + a.id + '"]');
-  if (!ta2 || ta2.value !== 'q-ready') throw new Error('快捷添加的片段没有出现在条件输入框里：' + (ta2 && ta2.value));
-  clickAct('more-add2', { 'data-id': a.id });
-  const mp2 = a.morePriorities[a.morePriorities.length - 1];
-  if (mp2.text !== 'q-ready') throw new Error('快捷添加的片段没有进入新条目：' + JSON.stringify(a.morePriorities.map(x => x.text)));
-  return a.morePriorities.map(x => `${x.text}@${x.priority}`).join('，');
 });
 
 check('界面：手输动作指令实时触发校验与释义刷新', () => {
@@ -800,7 +761,7 @@ check('回归④：快捷添加条件的比较选项 / 动作与角色选择器 
   cf.dispatch('change');
   const box3c = cfbox();
   if (!box3c.querySelector('[data-cfp="a"]').children.some(o => String(o.value) === String(a.index))) throw new Error('角色筛选把本角色动作滤掉了');
-  // 角色搜索词过滤角色下拉（先把筛选恢复成「全部角色」，否则当前选中项会被保留）
+  // 角色搜索词只筛选角色下拉（先把筛选恢复成「全部角色」，否则当前选中项会被保留）
   const cfReset = box3c.querySelector('[data-cfchar="a"]');
   cfReset.value = '';
   cfReset.dispatch('change');
@@ -809,6 +770,10 @@ check('回归④：快捷添加条件的比较选项 / 动作与角色选择器 
   cs.dispatch('input');
   const box3d = cfbox();
   if (box3d.querySelector('[data-cfchar="a"]').children.some(o => o.value === '枫原万叶')) throw new Error('角色搜索框没有过滤角色下拉');
+  // 搜索框只筛选角色下拉，不再直接过滤动作下拉
+  if (!box3d.querySelector('[data-cfp="a"]').children.some(o => String(o.value) === String(a.index))) {
+    throw new Error('角色搜索框不该直接过滤动作下拉（动作下拉只看角色筛选下拉）');
+  }
   cs.value = '';
   cs.dispatch('input');
   const box3e = cfbox();
@@ -831,21 +796,21 @@ check('回归④：快捷添加条件的比较选项 / 动作与角色选择器 
   num4.dispatch('input');
   cfbox().querySelector('[data-cf="insend"]').dispatch('click');
   if (a.conditionText !== 'min(since(),since()) < 5') throw new Error('组合 1 插入结果不对：' + a.conditionText);
-  // 组合 2：max(count(…,…,…),…) > 数值
+  // 组合 2：max(count(…,…,…),…) > 数值（两个时间入参用「时间值 / t-时间值 / t-since(动作)」三种输入方式）
   a.conditionText = '';
   g('renderActionsPanel')();
   pickFn('combo-max-count');
   const box5 = cfbox();
-  if (!box5.querySelector('[data-cfp="b"]') || !box5.querySelector('[data-cfp="c"]')) throw new Error('组合 2 缺少统一应用的起始/结束秒');
-  box5.querySelector('[data-cfp="b"]').value = '0.5';
-  box5.querySelector('[data-cfp="b"]').dispatch('input');
-  cfbox().querySelector('[data-cfp="c"]').value = '3';
-  cfbox().querySelector('[data-cfp="c"]').dispatch('input');
+  if (!box5.querySelector('[data-cfp="bMode"]') || !box5.querySelector('[data-cfp="cMode"]')) throw new Error('组合 2 缺少统一应用的时间入参选择');
+  box5.querySelector('[data-cfp="bNum"]').value = '0.5';
+  box5.querySelector('[data-cfp="bNum"]').dispatch('input');
+  cfbox().querySelector('[data-cfp="cNum"]').value = '3';
+  cfbox().querySelector('[data-cfp="cNum"]').dispatch('input');
   const num5 = cfbox().querySelector('[data-cfp="num"]');
   num5.value = '2';
   num5.dispatch('input');
   cfbox().querySelector('[data-cf="insend"]').dispatch('click');
-  if (a.conditionText !== 'max(count(),count()) > 2') throw new Error('组合 2 插入结果不对：' + a.conditionText);
+  if (a.conditionText !== 'max(count(,0.5,3),count(,0.5,3)) > 2') throw new Error('组合 2 插入结果不对：' + a.conditionText);
   // 括号运算符
   a.conditionText = '';
   g('renderActionsPanel')();
@@ -925,43 +890,6 @@ check('回归⑤：必要/排除队友支持重复角色与逐项与或，排除
   g('app').handlers['team-remove']({ getAttribute: (k) => ({ 'data-id': a.id, 'data-field': 'include', 'data-sub': '0', 'data-name': '钟离' })[k] }, {});
   if (a.teammates.include.length !== 1 || a.teammates.includeOps.length !== 0) throw new Error('删除重复角色后运算符没对齐');
   return '必要/排除都支持重复角色与逐项与或；排除用整体取非的 !( … )，运算符与所选一致';
-});
-
-check('回归③：导出再导入时，触发条件与队友条件能正确拆回两部分', () => {
-  g('state').strategy.actions = [];
-  g('state').ui.editingCharacter = '枫原万叶';
-  const e = makeAction('枫原万叶', 4, { name: '万叶e', action: 'e,wait(0.2)' });
-  const q = makeAction('枫原万叶', 5, { name: '万叶q', action: 'q,wait(0.1),ready' });
-  const other = makeAction('纳西妲', 4, { name: '草神e', action: 'e' });
-  e.conditionText = 'low-hp || q-ready';
-  e.teammates.include = ['钟离', '纳西妲'];
-  e.teammates.includeOps = ['or'];
-  e.teammates.exclude = ['芙宁娜'];
-  e.teammates.excludeOps = [];
-  e.teammates.autoExclude = [q.id];
-  q.teammates.include = ['钟离'];
-  other.teammates.include = ['玛薇卡'];
-  e.morePriorities = [{ id: 'm1', text: 'since(999)>20', priority: 10000, cmp: 'after', scope: { type: 1, element: '', character: '' }, manualPriority: false }];
-  const expr = g('buildExpression')(e, g('state').strategy.actions);
-  if (!expr.startsWith('(low-hp || q-ready) && (')) throw new Error('合并格式不对：' + expr);
-  const json = g('buildJson')();
-  const res = g('analyzeImport')(json);
-  g('applyImport')(res);
-  const back = g('state').strategy.actions.find(x => x.name === '万叶e');
-  if (back.conditionText !== 'low-hp || q-ready') throw new Error('触发条件没有正确拆回：' + JSON.stringify(back.conditionText));
-  if (back.morePriorities[0].text !== 'since(999) > 20') throw new Error('其他触发条件没有正确拆回：' + JSON.stringify(back.morePriorities[0].text));
-  if (back.teammates.include.join(',') !== '钟离,纳西妲' || back.teammates.includeOps.join(',') !== 'or') throw new Error('必要队友没有正确拆回：' + JSON.stringify(back.teammates));
-  if (back.teammates.exclude.join(',') !== '芙宁娜') throw new Error('排除队友没有正确拆回：' + JSON.stringify(back.teammates));
-  if (!back.teammates.autoExclude.length) throw new Error('自动排除没有还原成勾选状态');
-  // 拆出来的内容再导出应与第一次一致
-  if (g('buildExpression')(back, g('state').strategy.actions) !== expr) throw new Error('再导出的 expression 与原来不一致');
-  // 没有队友条件时，触发条件直接写入 expression（不额外加括号）
-  const otherBack = g('state').strategy.actions.find(x => x.name === '草神e');
-  if (g('buildExpression')(otherBack, g('state').strategy.actions) !== '(true) && (in-party(玛薇卡))') throw new Error('只有队友条件时的合并格式不对：' + g('buildExpression')(otherBack, g('state').strategy.actions));
-  const noTm = makeAction('纳西妲', 5, { name: '草神q', action: 'q,wait(0.1),ready' });
-  noTm.conditionText = 'q-ready';
-  if (g('buildExpression')(noTm, g('state').strategy.actions) !== 'q-ready') throw new Error('没有队友条件时不应多加括号');
-  return expr;
 });
 
 check('回归④b：多张卡片的「添加其他触发条件」表单互不干扰', () => {
@@ -1072,24 +1000,48 @@ check('回归③b：自动排除（勾选 + 「同一动作类型」）能被还
 
 /* ================= 回归：本次改动的 7 个问题 ================= */
 
-check('本次②：手输内容后用「快捷添加条件」插入片段，输入框里的内容不会被清空', () => {
+check('本次②：「添加其他触发条件」表单不再有输入框（先添加条目、再在条目里用快捷添加条件拼）', () => {
   const a = freshAction('万叶e', 4, '');
   g('state').ui.detailsOpen[a.id + ':moreadd'] = true;
   g('renderActionsPanel')();
-  const sel = `textarea[data-cond-ref="morenew:${a.id}"]`;
+  // 表单里既没有条件输入框，也没有「快捷添加条件」面板
+  if (dom.document.querySelector(`textarea[data-cond-ref="morenew:${a.id}"]`)) throw new Error('表单里仍有条件输入框');
+  if (dom.document.querySelector(`[data-cfbox="morenew:${a.id}"]`)) throw new Error('表单里仍有快捷添加条件面板');
+  // 表单上那两句文案：提示「先点按钮加进列表」+ 按钮自称「先点这里」
+  const pane = $('paneActions').innerHTML;
+  if (!pane.includes('请先点下面的按钮把这条其他触发条件加进列表')) throw new Error('没有提示用户先点添加按钮再编辑触发条件');
+  if (!pane.includes('添加其他触发条件（先点这里）')) throw new Error('添加按钮没有改成提醒先点它的文案');
+  // 选范围 → 添加条目
+  const form = dom.document.querySelector(`[data-moreaddform="${a.id}"]`);
+  const typeSel = form.querySelector('[data-na="type"]');
+  typeSel.value = '5';
+  form.dispatch('change', { target: typeSel });
+  const btn = dom.document.querySelectorAll('[data-act="more-add2"]').find(b => b.getAttribute('data-id') === a.id);
+  g('app').handlers['more-add2'](btn, {});
+  const mp = a.morePriorities[a.morePriorities.length - 1];
+  if (!mp || mp.text !== '') throw new Error('新条目应当是空条件：' + JSON.stringify(a.morePriorities));
+  if (mp.priority !== 60000) throw new Error('priority 应为次于爆发的 60000，实际 ' + mp.priority);
+  // 判定范围的选择要保留（不能因为重建面板就被重置）
+  const form2 = dom.document.querySelector(`[data-moreaddform="${a.id}"]`);
+  if (form2.querySelector('[data-na="type"]').value !== '5') throw new Error('添加后判定范围被重置了');
+  // 条目里的触发条件：手输 + 快捷添加条件混用，内容不会被清空
+  const idx = a.morePriorities.length - 1;
+  g('state').ui.detailsOpen[`${a.id}:more:${idx}`] = true;
+  g('renderActionsPanel')();
+  const sel = `textarea[data-cond-ref="more:${a.id}:${idx}"]`;
   const ta = dom.document.querySelector(sel);
-  if (!ta) throw new Error('找不到「添加其他触发条件」的条件输入框');
+  if (!ta) throw new Error('新条目里找不到触发条件输入框');
   ta.focus();
   ta.value = 'low-hp';
   ta.dispatch('input');                       // 真实浏览器里输入会冒泡到 document 的委托监听
-  if (g('state').ui.newMoreText[a.id] !== 'low-hp') throw new Error('手输内容没有进入模型：' + JSON.stringify(g('state').ui.newMoreText));
-  const cfbox = () => dom.document.querySelector(`[data-cfbox="morenew:${a.id}"]`);
+  if (a.morePriorities[idx].text !== 'low-hp') throw new Error('手输内容没有写进模型：' + JSON.stringify(a.morePriorities[idx].text));
+  const cfbox = () => dom.document.querySelector(`[data-cfbox="more:${a.id}:${idx}"]`);
   const andBtn = cfbox().querySelectorAll('[data-cfi]').find(x => x.getAttribute('data-cfi') === '&&');
   andBtn.dispatch('click');
   const ta2 = dom.document.querySelector(sel);
   if (!ta2) throw new Error('插入后找不到条件输入框');
   if (ta2.value !== 'low-hp &&') throw new Error('插入后输入框内容不对：' + JSON.stringify(ta2.value));
-  if (g('state').ui.newMoreText[a.id] !== 'low-hp &&') throw new Error('插入后模型内容不对：' + JSON.stringify(g('state').ui.newMoreText));
+  if (a.morePriorities[idx].text !== 'low-hp &&') throw new Error('插入后模型内容不对：' + JSON.stringify(a.morePriorities[idx].text));
   // 再用快捷添加插入一个函数片段，手输的部分也要保留
   const box = cfbox();
   const fsel = box.querySelector('[data-cfp="fn"]');
@@ -1098,16 +1050,8 @@ check('本次②：手输内容后用「快捷添加条件」插入片段，输�
   cfbox().querySelector('[data-cf="insend"]').dispatch('click');
   const ta3 = dom.document.querySelector(sel);
   if (ta3.value !== 'low-hp && q-ready') throw new Error('插入函数片段后输入框内容不对：' + JSON.stringify(ta3.value));
-  // 点「添加这条其他触发条件」后，新条目要带上这些内容
-  const form = dom.document.querySelector(`[data-moreaddform="${a.id}"]`);
-  const typeSel = form.querySelector('[data-na="type"]');
-  typeSel.value = '5';
-  form.dispatch('change', { target: typeSel });
-  const btn = dom.document.querySelectorAll('[data-act="more-add2"]').find(b => b.getAttribute('data-id') === a.id);
-  g('app').handlers['more-add2'](btn, {});
-  const mp = a.morePriorities[a.morePriorities.length - 1];
-  if (!mp || mp.text !== 'low-hp && q-ready') throw new Error('新条目没有带上输入框里的内容：' + JSON.stringify((a.morePriorities || []).map(x => x.text)));
-  return mp.text;
+  if (a.morePriorities[idx].text !== 'low-hp && q-ready') throw new Error('插入函数片段后模型内容不对：' + JSON.stringify(a.morePriorities[idx].text));
+  return a.morePriorities[idx].text;
 });
 
 check('本次③：手输修正其他触发条件后，条目里的报错红字一起消失', () => {
@@ -1873,10 +1817,1369 @@ check('回归C：在空的注释输入框里输入时，标记与标签立刻出
   return '输入即出现、清空即消失';
 });
 
-/* 需要等 Promise 的检查（角色选择弹窗是异步返回的） */
+/* ================= 回归：本次 8 项改动 ================= */
+
+/** 另起一个「新页面」：同一个 localStorage 里读草稿（验证草稿往返） */
+var bootFresh = function (store) {
+  const d2 = createDom();
+  for (const id of STATIC_IDS) d2.document.mount(d2.document.getElementById(id));
+  if (store) for (const [k, v] of store._m.entries()) d2.localStorage._m.set(k, v);
+  const c2 = {
+    console, window: d2.window, document: d2.document, localStorage: d2.localStorage,
+    Blob: class { }, FileReader: class { readAsText() { } }, alert: () => { }, confirm: () => true,
+    setTimeout, clearTimeout, setInterval, clearInterval, URL: d2.window.URL,
+  };
+  c2.globalThis = c2;
+  vm.createContext(c2);
+  vm.runInContext(readSources({ skipMissing: true }).map(s => s.code).join('\n'), c2);
+  d2.window.dispatch('DOMContentLoaded');
+  return { dom: d2, g: (c) => vm.runInContext(c, c2) };
+}
+
+const preSelect = (i) => dom.document.querySelectorAll('select[data-kind="pre"][data-field="character"]')[i];
+const preSearch = (i) => dom.document.querySelector(`[data-kind="pre"][data-field="avatarSearch"][data-idx="${i}"]`);
+
+check('① 战斗前动作：搜索框只筛选旁边的角色选择框（搜索框下方不再弹任何候选）', () => {
+  const s = g('state').strategy;
+  s.info.preActions = [{ character: '芙宁娜', cmd: 'e' }, { character: '', cmd: 'wait(0.2)' }];
+  g('setTab')('info');
+  g('renderInfoPanel')();
+  // 上方那个全局搜索框已经移除
+  if (dom.document.querySelector('[data-field="preAvatarSearch"]')) throw new Error('上方那个全局角色搜索框应已移除');
+  const search0 = preSearch(0);
+  if (!search0) throw new Error('第 1 行角色选择旁没有搜索框');
+  if (!preSearch(1)) throw new Error('第 2 行角色选择旁没有搜索框');
+  // 搜索框自己不能再挂候选列表（输入框下方弹出候选层就是那个 BUG）
+  if (search0.hasAttribute('list')) throw new Error('角色搜索框不该再挂 list（会在输入框下方弹出候选层）');
+  if (dom.document.querySelector('datalist')) throw new Error('页面里不该再有任何 datalist');
+  // 没输入搜索词时，选择框里保留全部角色
+  const sel0 = preSelect(0);
+  if (sel0.children.length < 100) throw new Error('未搜索时角色选择框应保留全部角色，实际 ' + sel0.children.length);
+  if (sel0.value !== '芙宁娜') throw new Error('角色选择框的选中项不对：' + sel0.value);
+  // 输入「枫原」→ 旁边的角色选择框只剩「（不指定角色）+ 当前已选 + 枫原万叶」
+  search0.value = '枫原';
+  search0.dispatch('input');
+  const opts = preSelect(0).children.filter(o => o.tagName === 'OPTION');
+  const optVals = opts.map(o => o.getAttribute('value'));
+  if (optVals[0] !== '') throw new Error('搜索后第一项应仍是「（不指定角色）」：' + optVals.join(','));
+  if (!optVals.includes('枫原万叶')) throw new Error('搜索「枫原」后应能选到枫原万叶：' + optVals.join(','));
+  if (optVals.some(v => v && v !== '枫原万叶' && v !== '芙宁娜')) throw new Error('搜索「枫原」后混进了不匹配的角色：' + optVals.join(','));
+  if (!opts.find(o => o.getAttribute('value') === '枫原万叶').textContent.includes('枫原万叶')) throw new Error('选项名不对');
+  if (dom.document.querySelector(`[data-idx="1"][data-field="avatarSearch"]`).value !== '') throw new Error('第 2 行的搜索框不该被影响');
+  // 输入不匹配的内容 → 只剩「（不指定角色）」与「当前已选的那个角色」（已选项保留，保证模型不被悄悄清空）
+  search0.value = '不存在的角色';
+  search0.dispatch('input');
+  const opts2 = preSelect(0).children.filter(o => o.tagName === 'OPTION').map(o => o.getAttribute('value'));
+  if (opts2.length !== 2 || opts2[0] !== '' || opts2[1] !== '芙宁娜') throw new Error('搜不到时应只剩「（不指定角色）+ 已选的芙宁娜」：' + opts2.join(','));
+  if (preSelect(0).value !== '芙宁娜') throw new Error('筛不到角色时原选择不该丢：' + preSelect(0).value);
+  // 重新渲染面板后搜索词保留
+  search0.value = '枫原';
+  search0.dispatch('input');
+  g('renderInfoPanel')();
+  if (preSearch(0).value !== '枫原') throw new Error('重建面板后角色搜索词丢了');
+  // 从筛选后的选择框里选一个角色：选择写进模型，搜索框顺势清空、选择框恢复全部角色
+  const selPick = preSelect(0);
+  selPick.value = '枫原万叶';
+  selPick.dispatch('change', { target: selPick });
+  if (s.info.preActions[0].character !== '枫原万叶') throw new Error('选中角色没有写进模型：' + s.info.preActions[0].character);
+  if (preSearch(0).value !== '') throw new Error('选中角色后搜索框应清空');
+  if (preSelect(0).children.length < 100) throw new Error('选中角色后选择框应恢复全部角色，实际 ' + preSelect(0).children.length);
+  return `每行独立搜索框；「枫原」→ 选择框只剩 ${opts.length - 1} 个候选；选完恢复全部角色`;
+});
+
+check('② 动作入参：角色搜索框只筛角色下拉，动作下拉只看角色下拉（搜索框下方不弹候选）', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const a = makeAction('芙宁娜', 4, { name: '芙芙e', action: 'e' });
+  const b = makeAction('枫原万叶', 4, { name: '万叶e', action: 'e' });
+  a.conditionText = '';
+  b.conditionText = '';
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.detailsOpen[a.id + ':cond'] = true;
+  g('renderActionsPanel')();
+  const cfbox = () => dom.document.querySelector('[data-cfbox="cond:' + a.id + '"]');
+  const fnEl = cfbox().querySelector('[data-cfp="fn"]');
+  fnEl.value = 'since';
+  fnEl.dispatch('change');
+  const search = cfbox().querySelector('[data-cfcharq="a"]');
+  if (!search) throw new Error('动作参数缺少角色搜索框');
+  if (search.hasAttribute('list') || dom.document.querySelector('datalist')) throw new Error('角色搜索框不该再挂候选列表（datalist）');
+  // 搜索框输入 → 角色筛选下拉只剩匹配项（动作下拉不受搜索框影响）
+  search.value = '芙宁';
+  search.dispatch('input');
+  const roleSel = cfbox().querySelector('[data-cfchar="a"]');
+  const roleTxt = roleSel.children.map(o => o.textContent).join(' / ');
+  if (!roleTxt.includes('芙宁娜')) throw new Error('搜索「芙宁」后角色筛选下拉里应只剩芙宁娜：' + roleTxt);
+  if (roleTxt.includes('枫原万叶')) throw new Error('搜索「芙宁」后角色筛选下拉里不该还有枫原万叶：' + roleTxt);
+  const actSel0 = cfbox().querySelector('[data-cfp="a"]');
+  if (!actSel0.children.some(o => String(o.value) === String(a.index)) || !actSel0.children.some(o => String(o.value) === String(b.index))) {
+    throw new Error('角色搜索框不该直接过滤动作下拉（动作下拉只看角色筛选下拉）');
+  }
+  // 选中「芙宁娜」→ 动作下拉只剩芙宁娜的动作
+  const fuOpt = roleSel.children.find(o => o.textContent.includes('芙宁娜'));
+  roleSel.value = fuOpt.getAttribute('value');
+  roleSel.dispatch('change');
+  const actSel1 = cfbox().querySelector('[data-cfp="a"]');
+  if (!actSel1.children.some(o => String(o.value) === String(a.index))) throw new Error('按角色筛选后动作下拉里应保留本角色动作');
+  if (actSel1.children.some(o => String(o.value) === String(b.index))) throw new Error('按角色筛选后动作下拉里不该还有别的角色的动作');
+  // 选完角色，搜索框顺势清空、角色下拉恢复全部角色
+  if (cfbox().querySelector('[data-cfcharq="a"]').value !== '') throw new Error('选中角色后角色搜索框应清空');
+  if (cfbox().querySelector('[data-cfchar="a"]').children.length < 3) throw new Error('选中角色后角色筛选下拉应恢复全部角色');
+  // 角色参数的搜索框同样只筛角色下拉
+  fnEl.value = 'q-ready';
+  fnEl.dispatch('change');
+  const cs = cfbox().querySelector('[data-cfcs="a"]');
+  if (!cs) throw new Error('角色参数缺少角色搜索框');
+  if (cs.hasAttribute('list') || dom.document.querySelector('datalist')) throw new Error('角色参数搜索框不该再挂候选列表');
+  cs.value = '钟';
+  cs.dispatch('input');
+  const charOpts = cfbox().querySelector('[data-cfp="a"]').children.map(o => o.textContent).join(' / ');
+  if (!charOpts.includes('钟离')) throw new Error('搜索「钟」后角色下拉里应只剩钟离：' + charOpts);
+  if (charOpts.includes('芙宁娜')) throw new Error('搜索「钟」后角色下拉里不该还有芙宁娜：' + charOpts);
+  return `角色搜索框只筛角色下拉；选角色后动作下拉按角色筛选；整页无 datalist`;
+});
+
+check('③ 条件函数下拉：单函数补上函数写法，组合函数保持算式', () => {
+  const sel = dom.document.querySelector('[data-cfp="fn"]');
+  if (!sel) throw new Error('找不到条件函数下拉');
+  const label = (v) => {
+    const o = sel.children.find(x => x.getAttribute('value') === v);
+    return o ? o.textContent : '';
+  };
+  const t = label('t');
+  if (t !== '距开战时间 —— t') throw new Error('「距开战时间」的选项名应为「距开战时间 —— t」，实际 ' + t);
+  const since = label('since');
+  if (since !== '距上次执行动作时间 —— since') throw new Error('since 的选项名不对：' + since);
+  const cnt = label('count');
+  if (cnt !== '动作执行次数 —— count') throw new Error('count 的选项名不对：' + cnt);
+  const lc = label('last-check');
+  if (lc !== '距上次战斗结束检查时间 —— last-check') throw new Error('last-check 的选项名不对：' + lc);
+  const mn = label('min');
+  if (mn !== '取最小值 —— min') throw new Error('min 的选项名不对：' + mn);
+  const combo = label('combo-min-since');
+  if (!combo.includes('min(since(参数1),since(参数2),…) < 参数a')) throw new Error('组合函数应保留完整算式：' + combo);
+  return `${t} / ${since} / ${combo}`;
+});
+
+check('④ count 的两个时间入参：时间值 / t-（时间值）/ t-since(动作)', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const a = makeAction('芙宁娜', 4, { name: '芙芙e', action: 'e' });
+  const b = makeAction('枫原万叶', 4, { name: '万叶e', action: 'e' });
+  a.conditionText = '';
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.detailsOpen[a.id + ':cond'] = true;
+  g('renderActionsPanel')();
+  const cfbox = () => dom.document.querySelector('[data-cfbox="cond:' + a.id + '"]');
+  const pickFn = (v) => { const el = cfbox().querySelector('[data-cfp="fn"]'); el.value = v; el.dispatch('change'); };
+  const setVal = (k, v, type) => { const el = cfbox().querySelector(`[data-cfp="${k}"]`); el.value = v; el.dispatch(type || 'input'); };
+  const modeOf = (k) => cfbox().querySelector(`[data-cfp="${k}Mode"]`);
+  const snip = () => cfbox().querySelector('[data-cfsnip]').textContent;
+
+  pickFn('count');
+  const bm = modeOf('b');
+  const cm = modeOf('c');
+  if (!bm || !cm) throw new Error('count 缺少两个时间入参的模式下拉');
+  const modeTexts = bm.children.map(o => o.textContent);
+  if (modeTexts.join('|') !== '（时间值）|t-（时间值）|t-since(动作)') throw new Error('时间入参的选项不对：' + modeTexts.join('|'));
+  // ① （时间值）：数值原样填入
+  setVal('bNum', '0.4');
+  setVal('cNum', '2');
+  if (snip() !== 'count(,0.4,2)') throw new Error('（时间值）的片段不对：' + snip());
+  // ② t-（时间值）：写成 t-数值；0 或留空只写 t
+  bm.value = 'tmi'; bm.dispatch('change');
+  cm.value = 'tmi'; cm.dispatch('change');
+  if (snip() !== 'count(,t-0.4,t-2)') throw new Error('t-（时间值）的片段不对：' + snip());
+  setVal('bNum', '0');
+  if (snip() !== 'count(,t,t-2)') throw new Error('数值为 0 时应只写 t：' + snip());
+  setVal('bNum', '');
+  if (snip() !== 'count(,t,t-2)') throw new Error('数值留空时应只写 t：' + snip());  // 模式切换只切换显示，不重建参数面板（输入框还是同一个节点）
+  const numEl = cfbox().querySelector('[data-cfp="bNum"]');
+  if (numEl.hidden) throw new Error('切到 t-（时间值）时数值框应可见');
+  // ③ t-since(动作)：目标动作按 index 填进 since
+  bm.value = 'tsi'; bm.dispatch('change');
+  if (!cfbox().querySelector('[data-cfp="bNum"]').hidden) throw new Error('切到 t-since 时数值框应隐藏');
+  const sinceBox = cfbox().querySelector('[data-cfp="bSince"]');
+  if (!sinceBox) throw new Error('t-since 缺少目标动作选择器');
+  const search = cfbox().querySelector('[data-cfcharq="bSince"]');
+  if (!search) throw new Error('t-since 的目标动作选择器缺少角色搜索框');
+  if (search.hasAttribute('list') || dom.document.querySelector('datalist')) throw new Error('角色搜索框不该再挂候选列表（datalist）');
+  // 先用角色搜索框把角色筛选下拉筛成「万叶」这一项，再选它 → 动作下拉只剩万叶的动作
+  // （动作下拉里已选中的动作即使被筛掉也会保留，所以这里先把当前选择清空，才能验证筛选真的生效）
+  const actSel0 = cfbox().querySelector('[data-cfp="bSince"]');
+  actSel0.value = '';
+  actSel0.dispatch('change');
+  const charSearch = cfbox().querySelector('[data-cfcharq="bSince"]');
+  charSearch.value = '万叶';
+  charSearch.dispatch('input');
+  const roleSel = cfbox().querySelector('[data-cfchar="bSince"]');
+  const wanOpt = roleSel.children.find(o => o.textContent.includes('枫原万叶'));
+  if (!wanOpt) throw new Error('按「万叶」搜索后角色筛选下拉里应只剩枫原万叶：' + roleSel.children.map(o => o.textContent).join(' / '));
+  if (roleSel.children.some(o => o.textContent.includes('芙宁娜'))) throw new Error('角色搜索框没有把角色筛选下拉筛干净');
+  roleSel.value = wanOpt.getAttribute('value');
+  roleSel.dispatch('change');
+  const filtered = cfbox().querySelector('[data-cfp="bSince"]');
+  if (filtered.children.some(o => String(o.value) === String(a.index))) throw new Error('选「枫原万叶」后没有把本角色的动作滤掉');
+  if (!filtered.children.some(o => String(o.value) === String(b.index))) throw new Error('角色筛选把万叶的动作滤掉了');
+  filtered.value = String(b.index);
+  filtered.dispatch('change');
+  if (snip() !== `count(,t-since(${b.index}),t-2)`) throw new Error('t-since(动作) 的片段不对：' + snip());
+  // 目标动作留空 → since 里也不填
+  setVal('bSince', '');
+  if (snip() !== 'count(,t-since(),t-2)') throw new Error('目标动作留空时的片段不对：' + snip());
+  // 真正插入到条件里，语法要能通过
+  const parsed = g('condParse')(`count(${a.index},t-since(${b.index}),t-2) > 1`, []);
+  if (parsed.error) throw new Error('生成的 t-since 写法解析失败：' + parsed.error);
+  // 组合 2 的时间入参同步更新
+  setVal('bSince', String(b.index));
+  pickFn('combo-max-count');
+  const bm2 = modeOf('b');
+  if (!bm2 || bm2.children.length !== 3) throw new Error('组合 2 的时间入参没有同步更新');
+  const n2 = cfbox().querySelector('[data-cfp="n"]');
+  n2.value = '1';
+  n2.dispatch('change');
+  bm2.value = 'tmi'; bm2.dispatch('change');
+  setVal('bNum', '0.5');
+  setVal('cNum', '3');
+  const arg1 = cfbox().querySelector('[data-cfp="arg1"]');
+  arg1.value = String(b.index);
+  arg1.dispatch('change');
+  const snip2 = snip();
+  // 组合 2 的默认比较是「大于」，默认数值留空 → 片段只到 max(...)
+  if (snip2 !== `max(count(${b.index},t-0.5,3))`) throw new Error('组合 2 的片段不对：' + snip2 + '（b.index=' + b.index + '）');
+  setVal('num', '0');
+  if (snip() !== `max(count(${b.index},t-0.5,3)) > 0`) throw new Error('组合 2 填了数值后应带上比较：' + snip());
+  // 组合 2 也能用 t-since(动作)
+  const cm2 = modeOf('c');
+  cm2.value = 'tsi'; cm2.dispatch('change');
+  const sinceC = cfbox().querySelector('[data-cfp="cSince"]');
+  sinceC.value = String(a.index);
+  sinceC.dispatch('change');
+  if (snip() !== `max(count(${b.index},t-0.5,t-since(${a.index}))) > 0`) throw new Error('组合 2 的 t-since 片段不对：' + snip() + '（a.index=' + a.index + '）');
+  return '（时间值）/ t-（时间值）/ t-since(动作) 三种写法，组合 2 同步更新';
+});
+
+check('⑤ 「添加其他触发条件」上方那条冗余注释已移除', () => {
+  g('setTab')('actions');
+  g('state').ui.editingCharacter = '芙宁娜';
+  g('renderActionsPanel')();
+  const html = dom.window.$('paneActions').innerHTML;
+  if (html.includes('如果你想临时停用这条动作又不想删掉它')) throw new Error('冗余注释仍在页面上');
+  if (html.includes('（恒假）即可')) throw new Error('冗余注释仍在页面上');
+  if (!html.includes('添加其他触发条件')) throw new Error('找不到「添加其他触发条件」区块');
+  // 条件为空时的「恒真」提示、写成 false 时的「恒假」提示都还在（只删了那条冗余注释）
+  const preview = dom.document.querySelector('[id^="condPreview-"]');
+  if (preview && !preview.textContent.includes('恒')) throw new Error('空条件的提示不该一起被删掉');
+  g('setTab')('info');
+  return '已移除';
+});
+
+check('⑥ 释义里 min/max 内的动作入参也显示动作名', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const a = makeAction('芙宁娜', 4, { name: '芙芙e', action: 'e' });
+  const b = makeAction('枫原万叶', 4, { name: '万叶e', action: 'e' });
+  a.conditionText = '';
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.detailsOpen[a.id + ':cond'] = true;
+  g('renderActionsPanel')();
+  const cfbox = () => dom.document.querySelector('[data-cfbox="cond:' + a.id + '"]');
+  const pickFnIn = (val) => { const el = cfbox().querySelector('[data-cfp="fn"]'); el.value = val; el.dispatch('change'); };
+  pickFnIn('min');
+  const nSel = cfbox().querySelector('[data-cfp="n"]');
+  nSel.value = '3';
+  nSel.dispatch('change');
+  const arg1 = cfbox().querySelector('[data-cfp="arg1"]');
+  arg1.value = `since(${b.index})`;
+  arg1.dispatch('input');
+  const arg2 = cfbox().querySelector('[data-cfp="arg2"]');
+  arg2.value = `since(${a.index})`;
+  arg2.dispatch('input');
+  const arg3 = cfbox().querySelector('[data-cfp="arg3"]');
+  arg3.value = 't-15';
+  arg3.dispatch('input');
+  cfbox().querySelector('[data-cf="insend"]').dispatch('click');
+  if (a.conditionText !== `min(since(${b.index}),since(${a.index}),t-15)`) throw new Error('插入结果不对：' + a.conditionText);
+  const preview = dom.document.getElementById('condPreview-cond-' + a.id + '-');
+  if (!preview) throw new Error('找不到释义区');
+  const txt = preview.textContent;
+  if (!txt.includes('万叶e')) throw new Error('min 里的动作入参没有显示动作名：' + txt.slice(0, 200));
+  if (!txt.includes('本动作')) throw new Error('min 里引用自己的动作入参应显示「本动作」：' + txt.slice(0, 200));
+  const aref = preview.querySelectorAll('.aref');
+  if (!aref.length) throw new Error('释义里应渲染出带悬停提示的动作名');
+  if (!aref[0].getAttribute('title').includes('万叶e')) throw new Error('悬停提示里没有动作名：' + aref[0].getAttribute('title'));
+  // max 同样
+  a.conditionText = '';
+  g('renderActionsPanel')();
+  pickFnIn('max');
+  const n2 = cfbox().querySelector('[data-cfp="n"]');
+  n2.value = '2';
+  n2.dispatch('change');
+  const m1 = cfbox().querySelector('[data-cfp="arg1"]');
+  m1.value = `count(${b.index},0,3)`;
+  m1.dispatch('input');
+  const m2 = cfbox().querySelector('[data-cfp="arg2"]');
+  m2.value = 'since';
+  m2.dispatch('input');
+  cfbox().querySelector('[data-cf="insend"]').dispatch('click');
+  const pv2 = dom.document.getElementById('condPreview-cond-' + a.id + '-');
+  if (!pv2.textContent.includes('万叶e')) throw new Error('max 里的动作入参没有显示动作名：' + pv2.textContent.slice(0, 200));
+  return txt.includes('万叶e') ? 'min/max 内的动作引用都能显示动作名' : '';
+});
+
+check('⑦ 卡片标题旁显示动作指令串 + 复制给指定角色（弹窗带搜索框）', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '枫原万叶';
+  const a = makeAction('枫原万叶', 4, { name: '万叶e', action: 'e' });
+  a.conditionText = 'low-hp && since(1) > 2';
+  g('state').ui.collapsed[a.id] = false;
+  g('renderActionsPanel')();
+  const sum = () => dom.document.querySelector(`[data-cardsummary="${a.id}"]`);
+  if (sum().textContent !== 'e') throw new Error('卡片标题旁应显示动作指令串，实际 ' + JSON.stringify(sum().textContent));
+  if (sum().textContent.includes('low-hp')) throw new Error('卡片标题旁不应再显示触发条件表达式');
+  // 手输指令后即时刷新
+  const cmdTa = dom.document.querySelector(`textarea[data-kind="act"][data-id="${a.id}"][data-field="action"]`);
+  cmdTa.value = 'e,wait(0.3)';
+  cmdTa.dispatch('input');
+  if (sum().textContent !== 'e,wait(0.3)') throw new Error('指令串预览没有实时刷新：' + sum().textContent);
+  // 「」触发条件」区块标题旁仍然是条件表达式
+  if (!dom.document.getElementById('paneActions').innerHTML.includes('触发条件 <span class="hint prev">low-hp')) {
+    throw new Error('「触发条件」区块标题旁的预览不该被改动');
+  }
+  // 复制按钮 → 弹窗（真正复制是异步的，放在文件末尾的异步检查里）
+  g('app').handlers['card-dup']({ getAttribute: () => a.id }, {});
+  if (!g('isModalOpen')()) throw new Error('复制按钮没有弹窗');
+  const cpBody = dom.window.$('modalBody').innerHTML;
+  if (!dom.window.$('cpList')) throw new Error('弹窗内容不对：' + cpBody.slice(0, 160) + ' ／ 标题=' + dom.window.$('modalTitle').innerHTML);
+  if (dom.window.$('modalTitle').innerHTML !== '复制动作到') throw new Error('弹窗标题不对：' + dom.window.$('modalTitle').innerHTML);
+  if (cpBody.replace(/\s/g, '').indexOf('复制一份给哪个角色') < 0) throw new Error('弹窗说明不对：' + cpBody.slice(0, 160));
+  const cp = dom.window.$('cpSearch');
+  if (!cp) throw new Error('复制弹窗缺少角色搜索框');
+  cp.value = '芙宁娜';
+  cp.dispatch('input');
+  const rows = dom.window.$('cpList').children.filter(r => r.classList.contains('roleitem'));
+  if (rows.length !== 1) throw new Error('搜索后应只剩一个角色，实际 ' + rows.length);
+  if (!rows[0].textContent.includes('芙宁娜')) throw new Error('搜索出来的角色不对：' + rows[0].textContent);
+  // 复制给本角色：弹窗里能找到「本角色（再复制一条）」那一项
+  const curRow = dom.window.$('cpList').children.filter(r => r.classList.contains('roleitem'))
+    .find(r => r.querySelector('[data-cppick]'));
+  if (!curRow) throw new Error('复制弹窗里没有可选项');
+  cp.value = '';
+  cp.dispatch('input');
+  const selfRow = dom.window.$('cpList').children.filter(r => r.classList.contains('roleitem'))
+    .find(r => r.querySelector('[data-cppick]').getAttribute('data-cppick') === '枫原万叶');
+  if (!selfRow) throw new Error('复制弹窗里应有「本角色」这一项');
+  if (!selfRow.textContent.includes('本角色（再复制一条）')) throw new Error('本角色的那一项文案不对：' + selfRow.textContent);
+  g('closeModal')(null);
+  // 昵称不猜：名称里没有源角色标准名时保持原名（只替换标准名）
+  makeAction('枫原万叶', 9, { name: '奶奶开盾', action: 'e' });
+  if (g('renameForCharacter')('奶奶开盾', '枫原万叶', '芙宁娜') !== '奶奶开盾') throw new Error('名称里没有标准名时不应改动');
+  if (g('renameForCharacter')('万叶e', '枫原万叶', '芙宁娜') !== '万叶e') throw new Error('昵称（万叶）不应被当成标准名替换');
+  if (g('renameForCharacter')('枫原万叶e', '枫原万叶', '芙宁娜') !== '芙宁娜e') throw new Error('标准名没有替换');
+  if (g('renameForCharacter')('枫原万叶-e', '枫原万叶', '芙宁娜') !== '芙宁娜-e') throw new Error('标准名替换（带后缀）不对');
+  return `标题旁显示指令串「${sum().textContent}」；复制弹窗可按角色搜索（搜「芙宁娜」只剩 1 项）`;
+});
+
+check('⑧ 最后一次编辑的内容（草稿往返）：界面上还没进模型的编辑也会落盘', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  g('state').strategy.info.name = '草稿往返测试';
+  g('state').strategy.info.version = 'v1';
+  const a = makeAction('芙宁娜', 4, { name: '芙芙e', action: 'e' });
+  a.conditionText = 'false';
+  a.morePriorities.push({ id: g('newId')(), text: '', priority: 43120, cmp: 'after', scope: { type: 4, element: '', character: '' }, manualPriority: false });
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.detailsOpen[a.id + ':more'] = true;
+  g('renderActionsPanel')();
+  const ta = dom.document.querySelector(`textarea[data-cond-ref="more:${a.id}:0"]`);
+  if (!ta) throw new Error('找不到其他触发条件的触发条件输入框');
+  if (ta.value !== '') throw new Error('新建条目的输入框应该是空的：' + JSON.stringify(ta.value));
+  // 只改 DOM、不派发 input 事件：模拟「最后一次编辑还卡在输入法组字里 / 事件还没到」
+  ta.value = 'count(93111,t-0.4,t) > 1 && since > 1';
+  g('saveDraftNow')();
+  if (a.morePriorities[0].text !== 'count(93111,t-0.4,t) > 1 && since > 1') throw new Error('落盘时没有把界面上的最后一次编辑写回模型：' + a.morePriorities[0].text);
+  if (a.conditionText !== 'false') throw new Error('主条件被其他触发条件的文本覆盖了：' + JSON.stringify(a.conditionText));
+  // 只改 DOM、再重建别的面板（DOM 里的内容比模型新）：落盘仍要以界面上的内容为准
+  g('renderInfoPanel')();
+  const taStale = dom.document.querySelector(`textarea[data-cond-ref="more:${a.id}:0"]`);
+  taStale.value = 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp';
+  g('saveDraftNow')();
+  if (a.morePriorities[0].text !== 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp') throw new Error('重建别的面板后落盘没有以界面内容为准：' + a.morePriorities[0].text);
+  if (a.conditionText !== 'false') throw new Error('重建别的面板后主条件被覆盖了：' + JSON.stringify(a.conditionText));
+  // 关键的防回退：写回模型之后，界面上那个输入框也必须跟着更新成模型里的内容（就是这次编辑）
+  if (taStale.value !== 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp') {
+    throw new Error('写回模型后界面上的旧值没有被同步（下一次写回会拿旧值覆盖模型）：' + JSON.stringify(taStale.value));
+  }
+  // 再落一次盘（这次界面与模型一致，不能再把内容写回去或写丢）
+  g('saveDraftNow')();
+  if (a.morePriorities[0].text !== 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp') throw new Error('重复落盘后内容变了：' + a.morePriorities[0].text);
+
+  // 从草稿重新启动：内容必须一字不差（主条件也还在）
+  const fresh = bootFresh(dom.localStorage);
+  const fa = fresh.g('state').strategy.actions.find(x => x.name === '芙芙e');
+  if (!fa) throw new Error('草稿重载后找不到动作：' + fresh.g('state').strategy.actions.map(x => x.name).join(','));
+  if (fa.morePriorities.length !== 1) throw new Error('草稿重载后其他触发条件数量不对：' + fa.morePriorities.length);
+  if (fa.morePriorities[0].text !== 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp') {
+    throw new Error('草稿重载后最后一次编辑丢了：' + JSON.stringify(fa.morePriorities[0].text));
+  }
+  if (fa.conditionText !== 'false') throw new Error('草稿重载后主条件不对：' + JSON.stringify(fa.conditionText));
+  const fta = fresh.dom.document.querySelector(`textarea[data-cond-ref="more:${fa.id}:0"]`);
+  if (fta && fta.value !== 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp') throw new Error('重载后输入框显示的内容不对：' + JSON.stringify(fta.value));
+
+  // 切页也会先把界面上的编辑写回模型
+  const ta2 = dom.document.querySelector(`textarea[data-cond-ref="more:${a.id}:0"]`);
+  ta2.value = 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp && q-ready';
+  g('setTab')('info');
+  if (a.morePriorities[0].text !== 'count(93111,t-0.4,t) > 1 && since > 1 && low-hp && q-ready') throw new Error('切页时没有把界面上的编辑写回模型：' + a.morePriorities[0].text);
+  if (a.conditionText !== 'false') throw new Error('切页把主条件弄丢了：' + JSON.stringify(a.conditionText));
+  g('setTab')('actions');
+  return 'saveDraftNow / 切页都会先取界面内容；草稿重载后主条件与其他触发条件都完整';
+});
+
+/* ---------- 本次改动的回归（编号对应本次需求清单） ---------- */
+
+check('本次④：「当前角色 + 动作类型 0」只写触发条件不写指令时，不再警告指令串为空', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '';
+  const m = makeAction('', 0, { name: '检查战斗结束', action: '' });
+  const other = makeAction('', 1, { name: '当前角色开盾', action: '' });
+  m.conditionText = 'battle-time(20)';
+  g('state').ui.collapsed[m.id] = false;
+  g('state').ui.detailsOpen[m.id + ':cmd'] = true;
+  g('renderActionsPanel')();
+  const warnsOf = (id) => (g('validateStrategy')().warnings || []).filter(w => w.actionId === id).map(w => w.text);
+  // 有触发条件 → 不提示指令串为空
+  if (warnsOf(m.id).some(t => t.includes('指令串为空'))) throw new Error('类型 0 只写条件时不该再警告指令串为空：' + warnsOf(m.id).join('；'));
+  // 同一张卡片的就地反馈也不能出现这条
+  const check0 = dom.document.querySelector(`[data-cmdcheck="act:${m.id}"]`);
+  if (!check0) throw new Error('找不到动作指令的就地反馈区');
+  if (check0.innerHTML.includes('指令串为空')) throw new Error('就地反馈里不该出现「指令串为空」');
+  // 指令串与触发条件同时为空 → 仍然警告
+  m.conditionText = '';
+  g('renderActionsPanel')();
+  if (!warnsOf(m.id).some(t => t.includes('指令串为空'))) throw new Error('指令串与触发条件同时为空时应仍然警告');
+  if (!dom.document.querySelector(`[data-cmdcheck="act:${m.id}"]`).innerHTML.includes('指令串为空')) throw new Error('两处都为空时就地反馈应给出警告');
+  // 写回条件后，手输一次指令空串 → 警告消失（就地反馈实时刷新）
+  m.conditionText = 'battle-time(20)';
+  g('renderActionsPanel')();
+  const ta = dom.document.querySelector(`textarea[data-kind="act"][data-id="${m.id}"][data-field="action"]`);
+  ta.focus();
+  ta.value = '';
+  ta.dispatch('input', { target: ta });
+  if (dom.document.querySelector(`[data-cmdcheck="act:${m.id}"]`).innerHTML.includes('指令串为空')) throw new Error('改回“只写条件”后就地反馈不该再警告');
+  // 其他动作（非类型 0）的空指令警告保持不变
+  if (!warnsOf(other.id).some(t => t.includes('指令串为空'))) throw new Error('普通动作的空指令警告必须保持');
+  return '类型 0 + 当前角色：两处同时为空才警告；其他动作不受影响';
+});
+
+check('本次⑤：卡片标题栏的动作指令超长截断（不再顶出第三行）', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '枫原万叶';
+  const long = 'attack,' + Array.from({ length: 30 }, (_, i) => 'wait(0.1)').join(',') + ',e';
+  const a = makeAction('枫原万叶', 4, { name: '万叶e', action: long });
+  g('state').ui.collapsed[a.id] = false;
+  g('renderActionsPanel')();
+  const sum = dom.document.querySelector(`[data-cardsummary="${a.id}"]`);
+  if (!sum) throw new Error('找不到卡片标题栏的指令摘要');
+  // 截断靠样式实现：现在有专门的 class，并且悬停提示里能看到完整指令
+  if (!sum.classList.contains('cardsummary')) throw new Error('指令摘要缺少 cardsummary 类（截断样式靠它生效）');
+  const title = sum.getAttribute('title') || '';
+  if (!title.includes(long)) throw new Error('悬停提示里应能看到完整指令串');
+  const css = fs.readFileSync(path.join(root, 'src', 'index.html'), 'utf8');
+  const rule = (css.match(/\.actioncard \.hd\{[^}]*\}/) || [''])[0];
+  if (!rule.includes('flex-wrap:nowrap')) throw new Error('卡片标题栏应改成不换行（否则长指令会把按钮顶到第三行）：' + rule);
+  if (!/\.actioncard \.hd \.cardsummary\{[^}]*text-overflow:ellipsis/.test(css)) throw new Error('指令摘要应带省略号截断');
+  if (sum.textContent !== long) throw new Error('摘要文本本身不该被改动（只由 CSS 截断显示）');
+  return `${long.length} 字符的指令串：标题栏不换行 + 省略号截断，悬停可看全文`;
+});
+
+check('本次⑥：三处文案更新（编号规则 / 触发条件注释 / 其他触发条件空提示）', () => {
+  const ui = fs.readFileSync(path.join(root, 'src', 'js', 'ui_actions.js'), 'utf8');
+  const info = fs.readFileSync(path.join(root, 'src', 'js', 'ui_info.js'), 'utf8');
+  const BASE = '“高血量，所需前置动作未执行，动作可能从未释放过”的基础条件假定';
+  // ① 信息页「关于编号规则」的动作类型段落末尾补一句
+  if (!info.includes('为以上动作类型分配的数字，是根据' + BASE + '下的动作优先程度决定的。')) throw new Error('「关于编号规则」缺少新增的说明句');
+  // ② 触发条件注释：去掉旧括注、补上新句
+  //   （基础条件的注释现在是 renderCondEditor 的 o.note 默认值，其他触发条件会传自己的 note；
+  //     两段文案各自的命中情况由这一组静态检查 + D 系列的行为检查一起覆盖）
+  if (ui.includes('（可直接手输，也可以用下面的「快捷添加条件」拼）')) throw new Error('触发条件注释里的旧括注应已移除');
+  if (!ui.includes('const note = o.note ||')) throw new Error('基础条件的注释没有改成可覆盖的默认 note');
+  if (!ui.includes("${o.title || '触发条件表达式'}：这里写入的条件应遵守")) throw new Error('基础条件的默认注释文案不对');
+  //   「其他触发条件」条目里的说明必须是这一版专用文案，且不能影响基础条件的注释
+  if (!ui.includes('这里用于写入不符合基础条件假定的条件，例如用于判断“低血量”或“需要前置动作已执行”的动作，配合上方判定顺序选择可实现优先或延后此条件判定的效果')) {
+    throw new Error('「其他触发条件」的说明文案不对');
+  }
+  {
+    const cnt = ui.split('用于对其他状况做判定的条件应该写入').length - 1;
+    if (cnt !== 1) throw new Error('「其他触发条件」的说明不应沿用基础条件那句（出现 ' + cnt + ' 次）');
+  }
+  // ③ 其他触发条件的空提示
+  if (ui.includes('还没有其他触发条件。常见用法：低血时把这个动作提到最前面')) throw new Error('其他触发条件的旧空提示应已替换');
+  if (!ui.includes('还没有其他触发条件。请将不符合基础条件假定的判定条件，例如“低血量”或“有前置辅助动作执行”的条件添加在这里，这样就能为这些情况设置不同的判定优先级，以实现类似于“低血时该动作优先执行”的效果')) {
+    throw new Error('其他触发条件的空提示文案不对');
+  }
+  // 页面里也要真的渲染出来（信息页 + 动作卡片）
+  g('state').ui.editingCharacter = '枫原万叶';
+  g('state').strategy.actions = [makeAction('枫原万叶', 4, { name: '万叶e', action: 'e' })];
+  g('state').ui.collapsed[g('state').strategy.actions[0].id] = false;
+  g('state').ui.detailsOpen[g('state').strategy.actions[0].id + ':more'] = true;
+  g('renderActionsPanel')();
+  const textOf = (id) => { const p = dom.document.getElementById(id); return p && p.innerHTML ? p.innerHTML : ''; };
+  const rawText = (id) => { const p = dom.document.getElementById(id); return p && p.textContent ? p.textContent : ''; };
+  const want = '为以上动作类型分配的数字，是根据';
+  if (!textOf('paneInfo').includes(want) || !rawText('paneInfo').includes(want)) {
+    const t = rawText('paneInfo');
+    const h = textOf('paneInfo');
+    throw new Error('信息页没有渲染新增的说明句；\n【文本长度】=' + t.length +
+      '\n【文本最后 120 字】=' + JSON.stringify(t.slice(-120)) +
+      '\n【HTML 长度】=' + h.length + '\n【HTML 最后 200 字】=' + JSON.stringify(h.slice(-200)));
+  }
+  const pane = dom.document.getElementById('paneActions').innerHTML;
+  if (!pane.includes('还没有其他触发条件。请将不符合基础条件假定的判定条件')) throw new Error('动作卡片里没有渲染新的空提示');
+  return '新增说明句已渲染；旧括注与旧空提示都已替换';
+});
+
+check('本次③：含动作入参的片段插入后，不弹「尾数已被占用」，其他动作的优先于/次于选择也不丢', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '';
+  const a = makeAction('', 4, { name: '当前角色e', action: 'e' });
+  const b = makeAction('枫原万叶', 4, { name: '万叶e', action: 'e' });
+  const c = makeAction('', 4, { name: '当前角色e2', action: 'e' });
+  a.conditionText = '';
+  b.conditionText = '';
+  c.conditionText = '';
+  // 其他动作的「其他触发条件」选择（用来观察是否会被插桩流程弄丢）
+  b.morePriorities = [{ id: 'mpb', text: 'low-hp', priority: 44000, cmp: 'before', scope: { type: 4, element: 5, character: '枫原万叶' }, manualPriority: false }];
+  c.morePriorities = [{ id: 'mpc', text: 'q-ready', priority: 20000, cmp: 'after', scope: { type: 1, element: '', character: '' }, manualPriority: false }];
+  const snapshot = () => JSON.stringify({
+    b: b.morePriorities.map(m => [m.text, m.priority, m.cmp, m.scope]),
+    c: c.morePriorities.map(m => [m.text, m.priority, m.cmp, m.scope]),
+    // 按名字排序：刷新时 actions 会按 index 重排，这里只关心「每条动作的尾数/编号有没有被改动」
+    slots: g('state').strategy.actions.map(x => [x.name, x.slot, x.index]).sort((p, q) => (p[0] < q[0] ? -1 : 1)),
+  });
+  const before = snapshot();
+  const alertFrom = alertLog.length;
+  const alerts = () => alertsSince(alertFrom);
+  try {
+    g('state').ui.collapsed[a.id] = false;
+    g('state').ui.detailsOpen[a.id + ':cond'] = true;
+    g('state').ui.detailsOpen[a.id + ':moreadd'] = true;
+    g('renderActionsPanel')();
+    const cfbox = () => dom.document.querySelector('[data-cfbox="cond:' + a.id + '"]');
+    const fnEl = cfbox().querySelector('[data-cfp="fn"]');
+    fnEl.value = 'since';
+    fnEl.dispatch('change');
+    // 用角色搜索框把角色筛选下拉筛成「枫原万叶」，再选它
+    const sbox = cfbox().querySelector('[data-cfcharq="a"]');
+    sbox.value = '万叶';
+    sbox.dispatch('input');
+    const roleSel = cfbox().querySelector('[data-cfchar="a"]');
+    const wan = roleSel.children.find(o => o.textContent.includes('枫原万叶'));
+    roleSel.value = wan.getAttribute('value');
+    roleSel.dispatch('change');
+    // 选目标动作（万叶的动作）→ 插到末尾
+    const actSel = cfbox().querySelector('[data-cfp="a"]');
+    actSel.value = String(b.index);
+    actSel.dispatch('change');
+    cfbox().querySelector('[data-cf="insend"]').dispatch('click');
+    if (a.conditionText !== `since(${b.index})`) throw new Error('含动作入参的片段没有正确插入：' + JSON.stringify(a.conditionText));
+    // 「添加其他触发条件」表单里再走一遍：先加一条空条目，再在条目里用快捷添加条件插入含动作入参的片段
+    const form = dom.document.querySelector(`[data-moreaddform="${a.id}"]`);
+    const typeSel = form.querySelector('[data-na="type"]');
+    typeSel.value = '4';
+    form.dispatch('change', { target: typeSel });
+    const addBtn = dom.document.querySelectorAll('[data-act="more-add2"]').find(x => x.getAttribute('data-id') === a.id);
+    g('app').handlers['more-add2'](addBtn, {});
+    const mpIdx = a.morePriorities.length - 1;
+    if (!a.morePriorities[mpIdx] || a.morePriorities[mpIdx].text !== '') throw new Error('新条目应当是空条件');
+    g('state').ui.detailsOpen[`${a.id}:more:${mpIdx}`] = true;
+    g('renderActionsPanel')();
+    const cfbox2 = () => dom.document.querySelector('[data-cfbox="more:' + a.id + ':' + mpIdx + '"]');
+    const fn2 = cfbox2().querySelector('[data-cfp="fn"]');
+    fn2.value = 'since';
+    fn2.dispatch('change');
+    const sbox2 = cfbox2().querySelector('[data-cfcharq="a"]');
+    sbox2.value = '万叶';
+    sbox2.dispatch('input');
+    const roleSel2 = cfbox2().querySelector('[data-cfchar="a"]');
+    roleSel2.value = roleSel2.children.find(o => o.textContent.includes('枫原万叶')).getAttribute('value');
+    roleSel2.dispatch('change');
+    const actSel2 = cfbox2().querySelector('[data-cfp="a"]');
+    actSel2.value = String(b.index);
+    actSel2.dispatch('change');
+    cfbox2().querySelector('[data-cf="insend"]').dispatch('click');
+  } catch (e) {
+    throw e;
+  }
+  const aAlerts = alerts();
+  if (aAlerts.length) throw new Error('插桩流程里弹出了对话框：' + aAlerts.join(' ／ '));
+  const after = snapshot();
+  if (after !== before) throw new Error('插桩流程改动了其他内容：\n前：' + before + '\n后：' + after);
+  const act = g('state').strategy.actions.find(x => x.id === a.id);
+  if (act.morePriorities.length !== 1) throw new Error('其他触发条件条数不该变化：' + JSON.stringify(act.morePriorities.map(m => m.text)));
+  if (!String(act.morePriorities[0].text).includes(`since(${b.index})`)) throw new Error('没有把含动作入参的片段写进条目：' + JSON.stringify(act.morePriorities));
+  return '两次插入都没弹窗；其他动作的 morePriorities 与全部动作的尾数一字未变';
+});
+
+check('本次③b：重建面板不会把「尾数」下拉的意外变化当成用户操作（尾数冲突提示的来源）', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '';
+  const a = makeAction('', 4, { name: '当前角色e', action: 'e' });
+  const b = makeAction('', 4, { name: '当前角色e2', action: 'e' });
+  const c = makeAction('', 4, { name: '当前角色e3', action: 'e' });
+  const slots = () => g('state').strategy.actions.map(x => x.slot).join(',');
+  if (slots() !== '1,2,3') throw new Error('初始尾数不对：' + slots());
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.collapsed[b.id] = false;
+  g('state').ui.collapsed[c.id] = false;
+  g('renderActionsPanel')();
+  // 从卡片内部取下拉：面板重建后文档里可能还留着旧的（已脱离）节点，按 data-id 直接查会拿到它
+  const slotSel = (id) => {
+    const card = dom.document.querySelector(`[data-card="${id}"]`);
+    return card && card.querySelector('select[data-field="slot"]');
+  };
+  if (!slotSel(a.id) || !slotSel(b.id) || !slotSel(c.id)) throw new Error('找不到尾数下拉');
+  const alertFrom = alertLog.length;
+  const alerts = () => alertsSince(alertFrom);
+  // 模拟「面板重建 / 浏览器把下拉的值挪了位置」：DOM 里变成 1，但这次变化没有事件、也不是用户操作
+  const sB = slotSel(b.id);
+  sB.value = '1';
+  // 紧接着因为别的操作触发一次重建
+  g('rerenderCurrent')(true);
+  if (alerts().length) throw new Error('重建面板弹出了对话框：' + alerts().join(' ／ '));
+  if (slots() !== '1,2,3') throw new Error('重建面板不该改动尾数：' + slots());
+  // 重建后下拉要显示回模型里的值
+  if (String(slotSel(b.id).value) !== '2') throw new Error('重建后尾数下拉应显示模型里的 2，实际 ' + slotSel(b.id).value);
+  // 用户真的改尾数时照常生效（先腾出空位，再逐个挪）
+  const pick = (id, v) => {
+    const el = slotSel(id);
+    if (!el) throw new Error('找不到 ' + id + ' 的尾数下拉');
+    el.value = String(v);
+    el.dispatch('change', { target: el });
+  };
+  pick(c.id, 5);
+  if (slots() !== '1,2,5') throw new Error('把第 3 条挪到空位 5 应成功：' + slots());
+  pick(b.id, 3);
+  if (slots() !== '1,3,5') throw new Error('空位 3 应能挪进去：' + slots());
+  pick(a.id, 2);
+  if (slots() !== '2,3,5') throw new Error('空位 2 应能挪进去：' + slots());
+  // 真的撞车时仍然提示，并且界面回退到模型里的值；同一次改动只提示一次
+  const clashFrom = alertLog.length;
+  pick(b.id, 2);
+  if (slots() !== '2,3,5') throw new Error('撞车时不该改动尾数：' + slots());
+  const hits = alertsSince(clashFrom).filter(m => m.includes('尾数 2 已被同角色同类型的另一条动作占用'));
+  if (hits.length !== 1) throw new Error('撞车应正好提示一次，实际 ' + hits.length + ' 次：' + alertsSince(clashFrom).join(' ／ '));
+  if (String(slotSel(b.id).value) !== '3') throw new Error('撞车后下拉应回退成模型里的 3，实际 ' + slotSel(b.id).value);
+  return '意外的下拉变化被忽略；用户改尾数照常生效；撞车只提示一次并回退';
+});
+
+/* ================= 本期（ensureCast 实时校验 / 命座要求 / 预设 / 队伍） ================= */
+
+check('D①：勾选 / 取消「确保E技能释放成功」、补上 e 指令后，警告立刻出现与消失', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '';
+  const a = makeAction('', 4, { name: '当前角色a', action: 'attack' });
+  g('state').ui.collapsed[a.id] = false;
+  g('renderActionsPanel')();
+  const warnCount = () => g('state').lastIssues.warnings.filter(w => /确保E技能/.test(w.text)).length;
+  if (warnCount() !== 0) throw new Error('没勾选时不该有这个警告');
+  const box = () => dom.document.querySelector(`input[type="checkbox"][data-id="${a.id}"][data-field="ensureCast"]`);
+  const el = box();
+  if (!el) throw new Error('找不到「确保E技能释放成功」勾选框');
+  el.checked = true;
+  el.dispatch('change', {});
+  if (!a.ensureCast) throw new Error('勾选没有写进模型');
+  if (warnCount() !== 1) throw new Error('勾选后警告应当立刻出现（不必等重建面板）：' + JSON.stringify(g('state').lastIssues.warnings.map(w => w.text)));
+  if (!$('side').innerHTML.includes('确保E技能释放成功')) throw new Error('右侧校验面板没有同步出现警告');
+  if (!dom.document.querySelector(`[data-cardbadges="${a.id}"]`).innerHTML.includes('badge warn')) throw new Error('卡片角标没有同步');
+  // 在动作指令里补一个 e → 警告立刻消失
+  const ta = dom.document.querySelector(`textarea[data-kind="act"][data-id="${a.id}"][data-field="action"]`);
+  ta.value = 'attack,e';
+  ta.dispatch('input');
+  if (warnCount() !== 0) throw new Error('补上 e 指令后警告应当立刻消失：' + JSON.stringify(g('state').lastIssues.warnings.map(w => w.text)));
+  // 再取消勾选 → 也立刻消失（这次先把 e 去掉，保证警告本身是「该出现」的状态）
+  ta.value = 'attack';
+  ta.dispatch('input');
+  if (warnCount() !== 1) throw new Error('去掉 e 指令后警告应当回来');
+  box().checked = false;
+  box().dispatch('change', {});
+  if (a.ensureCast) throw new Error('取消勾选没有写进模型');
+  if (warnCount() !== 0) throw new Error('取消勾选后警告应当立刻消失');
+  // 开盾动作自动勾选 ensureCast 时，同样要立刻反映到校验面板
+  g('state').strategy.actions = [];
+  g('renderActionsPanel')();
+  const shield = makeAction('钟离', 1, { name: '钟离开盾', action: 'attack' });
+  if (!shield.ensureCast) throw new Error('开盾类型应默认勾选 ensureCast');
+  g('refreshLiveIssues')();
+  if (g('state').lastIssues.warnings.filter(w => /确保E技能/.test(w.text)).length !== 1) throw new Error('新建开盾动作后应立刻出现该警告');
+  return '勾选 / 取消勾选 / 补 e 指令三种操作都即时刷新了警告';
+});
+
+check('D②：「新建（含兜底动作）」预置 3 条动作（兜底战斗检查 → 角色红血标记 → 等待）', () => {
+  g('newStrategy')('preset');
+  const list = g('state').strategy.actions;
+  if (list.length !== 3) throw new Error('应当正好 3 条动作，实际 ' + list.length + '：' + list.map(a => a.name).join('，'));
+  const byName = (n) => list.find(a => a.name === n);
+  const chk = byName('兜底战斗检查');
+  const mark = byName('角色红血标记');
+  const wait = byName('等待');
+  if (!chk || !mark || !wait) throw new Error('动作名不对：' + list.map(a => a.name).join('，'));
+  const idxOrder = list.map(a => a.index);
+  if (!(idxOrder[0] < idxOrder[1] && idxOrder[1] < idxOrder[2])) throw new Error('动作顺序应为 兜底战斗检查 → 角色红血标记 → 等待：' + idxOrder.join(','));
+  if (chk.type !== 0 || chk.character !== '') throw new Error('兜底战斗检查应为「当前角色 + 类型 0」');
+  if (chk.action !== 'check,scroll(10)') throw new Error('兜底战斗检查的指令不对：' + chk.action);
+  if (chk.conditionText !== 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )') throw new Error('兜底战斗检查的条件不对：' + chk.conditionText);
+  if ((chk.morePriorities || []).length || chk.tags) throw new Error('兜底战斗检查不该有其他触发条件或注释');
+  if (mark.type !== 0 || mark.character !== '') throw new Error('角色红血标记应为「当前角色 + 类型 0」');
+  if (mark.action !== '') throw new Error('角色红血标记不该有指令：' + mark.action);
+  if (mark.conditionText !== 'low-hp && since > 4') throw new Error('角色红血标记的条件不对：' + mark.conditionText);
+  if ((mark.morePriorities || []).length || mark.tags) throw new Error('角色红血标记不该有其他触发条件或注释');
+  if (wait.type !== 9 || wait.action !== 'wait(0.2)') throw new Error('等待动作不对：' + wait.type + '/' + wait.action);
+  const v = g('validateStrategy')();
+  if (v.errors.length) throw new Error('预设策略不该有错误：' + v.errors.map(x => x.text).join('；'));
+  // 按钮文案与顺序
+  g('setTab')('info');
+  const html = $('paneInfo').innerHTML;
+  if (!html.includes('新建（含兜底动作）')) throw new Error('按钮没有改名成「新建（含兜底动作）」');
+  if (!html.includes('新建空白策略（不建议）')) throw new Error('按钮没有改名成「新建空白策略（不建议）」');
+  if (html.indexOf('新建（含兜底动作）') > html.indexOf('新建空白策略（不建议）')) throw new Error('「新建（含兜底动作）」应排在「新建空白策略（不建议）」前面');
+  g('newStrategy')('blank');
+  if (g('state').strategy.actions.length !== 0) throw new Error('空白策略不该有动作');
+  return list.map(a => `${a.name}(${a.index})`).join(' → ');
+});
+
+check('D③：命座要求的三元组与 consRequirement、expression 的组成 / 拆分往返', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  makeAction('芙宁娜', 4, { name: '芙芙e', action: 'e' });
+  // 每次都按名字取当前策略里的实例，避免拿到被别处换掉的旧对象
+  const live = () => g('state').strategy.actions.find(x => x.name === '芙芙e');
+  live().conditionText = 'low-hp';
+  // 无命座要求：expression 组成方式维持原样
+  if (g('buildExpression')(live(), g('state').strategy.actions) !== 'low-hp') throw new Error('无命座要求时表达式不该变');
+  const cons = (mode, target, enabled) => {
+    const a = live();
+    a.consMode = mode; a.consTarget = target; a.consEnabled = enabled;
+    return g('buildExpression')(a, g('state').strategy.actions);
+  };
+  if (cons('open', 3, true) !== '(low-hp) && (true)') throw new Error('达到命座开启 + 勾选 应为 true：' + cons('open', 3, true));
+  if (cons('open', 3, false) !== '(low-hp) && (false)') throw new Error('达到命座开启 + 不勾选 应为 false');
+  if (cons('close', 3, true) !== '(low-hp) && (false)') throw new Error('达到命座关闭 + 勾选 应为 false（x 命及以上不执行）');
+  if (cons('close', 3, false) !== '(low-hp) && (true)') throw new Error('达到命座关闭 + 不勾选 应为 true');
+  // consRequirement 的**符号**表示模式（正 = 达到命座开启、负 = 达到命座关闭），与勾选状态无关；
+  // 「启用 / 停用」由 expression 里那个布尔值表达，两者合起来才能唯一确定界面上的三元组。
+  if (g('consRequirementOf')(live()) !== -3) throw new Error('关闭 + 不勾选（模式是关闭）应当存成 -3，实际 ' + g('consRequirementOf')(live()));
+  live().teammates.include = ['枫原万叶'];
+  live().teammates.includeOps = [];
+  if (g('buildExpression')(live(), g('state').strategy.actions) !== '((low-hp) && (true)) && (in-party(枫原万叶))') {
+    throw new Error('有命座要求 + 有队友条件时的组成方式不对：' + g('buildExpression')(live(), g('state').strategy.actions));
+  }
+  // 导出 → 回读：四种「模式 + 勾选」组合都要**逐字还原**
+  //（「开启 + 不勾选」与「关闭 + 勾选」的语义相同、数值也相同，必须靠 expression 里那个布尔值区分）
+  const combos = [['open', 3, true], ['open', 3, false], ['close', 3, true], ['close', 3, false]];
+  for (const [mode, target, enabled] of combos) {
+    live().consMode = mode; live().consTarget = target; live().consEnabled = enabled;
+    const wantSign = mode === 'close' ? -target : target;
+    const jsonN = g('buildJson')();
+    const nodeN = jsonN.actions.find(x => x.name === '芙芙e');
+    if (nodeN.consRequirement !== wantSign) throw new Error(`${mode}/${target}/${enabled} 应写 consRequirement=${wantSign}，实际 ${JSON.stringify(nodeN.consRequirement)}`);
+    const resN = g('analyzeImport')(JSON.parse(JSON.stringify(jsonN)));
+    if (resN.fatal.length) throw new Error('回读失败：' + resN.fatal.join('；'));
+    const backN = resN.actions.find(x => x.name === '芙芙e');
+    const got = [backN.consMode, backN.consTarget, !!backN.consEnabled];
+    if (got[0] !== mode || got[1] !== target || got[2] !== enabled) {
+      throw new Error(`命座要求没有原样还原：${mode}/${target}/${enabled} → ${JSON.stringify(got)}（consRequirement=${wantSign}，expression=${JSON.stringify(nodeN.condition.expression)}）`);
+    }
+    if (g('buildExpression')(backN, [backN]) !== g('buildExpression')(live(), g('state').strategy.actions)) {
+      throw new Error(`命座要求回读后表达式变了：${mode}/${target}/${enabled}`);
+    }
+  }
+  // 回读（并应用）之后，再导出的 JSON 必须与原来逐字一致
+  live().consMode = 'close'; live().consTarget = 4; live().consEnabled = true;
+  const json2 = g('buildJson')();
+  if (json2.actions.find(x => x.name === '芙芙e').consRequirement !== -4) throw new Error('关闭 + 勾选 应写 -4');
+  const res2 = g('analyzeImport')(JSON.parse(JSON.stringify(json2)));
+  const back2 = res2.actions.find(x => x.name === '芙芙e');
+  if (back2.consMode !== 'close' || back2.consTarget !== 4 || back2.consEnabled !== true) throw new Error('关闭 + 勾选 回读不对：' + JSON.stringify([back2.consMode, back2.consTarget, back2.consEnabled]));
+  g('applyImport')(res2);
+  const json2b = g('buildJson')();
+  if (JSON.stringify(json2b) !== JSON.stringify(json2)) throw new Error('命座要求往返两次的 JSON 不一致：\n  ' + JSON.stringify(json2) + '\n  ' + JSON.stringify(json2b));
+  // 这条动作还带着队友条件（必要队友 枫原万叶 + 自动排除），expression 应当是
+  // 「((触发条件) && (命座要求 false)) && (队友条件…)」——命座要求那一段在队友条件前面。
+  const expr2 = g('buildExpression')(back2, g('state').strategy.actions);
+  if (!expr2.startsWith('((low-hp) && (false)) && ')) throw new Error('回读后的命座要求段落位置不对：' + expr2);
+  if (!expr2.includes('in-party(枫原万叶)')) throw new Error('回读后的队友条件丢了：' + expr2);
+  // 无命座要求时不写这个字段
+  const a2 = makeAction('芙宁娜', 4, { name: '芙芙q', action: 'q,wait(0.1),ready' });
+  a2.conditionText = 'q-ready';
+  const node2 = g('buildJson')().actions.find(x => x.name === '芙芙q');
+  if ('consRequirement' in node2) throw new Error('无命座要求时不该写 consRequirement：' + JSON.stringify(node2));
+  // 导入时 consRequirement 是已知字段、不报 unknown-field
+  const unknown = res2.problems.filter(p => p.kind === 'unknown-field' && /consRequirement/i.test(p.text));
+  if (unknown.length) throw new Error('consRequirement 是自己的字段，不该被当成未知字段：' + unknown.map(x => x.text).join('；'));
+  return '四种模式/勾选组合的表达式、consRequirement 数值与逐字回读都正确';
+});
+
+check('D④：命座要求勾选的联动规则（有高命必有低命，没有低命必没有高命）', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const mk = (name, mode, target, enabled) => {
+    makeAction('芙宁娜', 4, { name, action: 'e', conditionText: 'low-hp' });
+    const a = g('state').strategy.actions.find(x => x.name === name);
+    a.consMode = mode; a.consTarget = target; a.consEnabled = enabled;
+    return a;
+  };
+  // 用户举的例子：A、B 选了「达到命座开启」，C、D 选了「达到命座关闭」；
+  // A、C 是三命，B 是一命，D 是六命。
+  const A = mk('命案A', 'open', 3, false);
+  const B = mk('命案B', 'open', 1, false);
+  const C = mk('命案C', 'close', 3, false);
+  const D = mk('命案D', 'close', 6, false);
+  // 一律按名字从当前策略里取实例（不要留着构造时的引用，避免拿到被换掉的旧对象）
+  const get = (n) => g('state').strategy.actions.find(x => x.name === n);
+  const st = () => ['命案A', '命案B', '命案C', '命案D'].map(n => (get(n).consEnabled ? '1' : '0')).join('');
+  g('syncConsEnabled')(get('命案A'), true);
+  if (st() !== '1110') throw new Error('勾选 A 时应当同步勾上 B 与 C、但不勾 D，实际 ' + st());
+  g('syncConsEnabled')(get('命案A'), false);
+  if (st() !== '0100') throw new Error('取消勾选 A 时应当同步取消 C（目标命座 ≥3）、但不动 B（1 命），实际 ' + st());
+  // 再把 A 勾回来，验证「取消勾选高命不会影响低命」
+  g('syncConsEnabled')(get('命案A'), true);
+  if (st() !== '1110') throw new Error('重新勾选 A 应恢复 1110，实际 ' + st());
+  // 单独验证「勾选只影响不高于自己的」
+  g('syncConsEnabled')(get('命案B'), true);   // 一命：目标命座 ≤1 的只有 B（已经是勾选状态）
+  if (st() !== '1110') throw new Error('勾选一命不该影响其他，实际 ' + st());
+  g('syncConsEnabled')(get('命案B'), false);  // 取消一命：目标命座 ≥1 的全部取消
+  if (st() !== '0000') throw new Error('取消一命应当取消全部（它们的目标命座都 ≥1），实际 ' + st());
+  g('syncConsEnabled')(get('命案D'), true);   // 六命：目标命座 ≤6 的全部勾上
+  if (st() !== '1111') throw new Error('勾选六命应当勾上全部，实际 ' + st());
+  g('syncConsEnabled')(get('命案D'), false);  // 取消六命：只有目标命座 ≥6 的（D 自己）
+  if (st() !== '1110') throw new Error('取消六命只应取消自己，实际 ' + st());
+  // 规整函数：把互相矛盾的状态收敛成「向下闭合」
+  mk('命案E', 'open', 2, false);
+  mk('命案F', 'open', 2, true);      // 同命座有一个选了就都统一勾上
+  mk('命案G', 'open', 5, true);      // 低命座没勾选 → 高命座也取消
+  get('命案A').consEnabled = false;
+  g('normalizeConsChecks')(g('state').strategy.actions, '芙宁娜');
+  const names = ['命案A', '命案B', '命案C', '命案D', '命案E', '命案F', '命案G'];
+  // 归一化之后的校验**只从模型数组取真值**（不经过任何本地对象引用、也不依赖辅助函数），
+  // 免得测试里的引用和模型不是同一批对象时把结论带偏。
+  const rows = g('state').strategy.actions
+    .filter(a => a.name && a.name.indexOf('命案') === 0)
+    .map(a => ({ name: a.name, target: a.consTarget, enabled: !!a.consEnabled }));
+  const got = names.map(n => {
+    const row = rows.find(r => r.name === n);
+    return row && row.enabled ? '1' : '0';
+  }).join('');
+  // 从模型数组直接算「当前命座」：有某个目标命座被勾选，就说明这个角色按 ≥ 那个命座来设置开关；
+  // 规整之后必然满足「≤ 当前命座的一律勾上、> 的一律取消」（向下闭合）。
+  const checkedTargets = rows.filter(r => r.enabled).map(r => r.target);
+  const wantLevel = checkedTargets.length ? Math.max(...checkedTargets) : 0;
+  const bad = rows.filter(r => r.enabled !== (r.target <= wantLevel));
+  const dump = JSON.stringify(rows);
+  if (bad.length) throw new Error('规整后不满足「向下闭合」：' + bad.map(r => `${r.name}(target=${r.target},enabled=${r.enabled})`).join('，') + `，当前命座=${wantLevel}，模型=${dump}`);
+  if (wantLevel !== 5) throw new Error('当前命座应为 5（G 是 5 命且勾选），实际 ' + wantLevel + '，模型=' + dump);
+  // 命案A(3)/B(1)/C(3)/E(2)/F(2)/G(5) 都该勾上，只有六命的 D 取消 → 1110 111。
+  if (got !== '1110111') throw new Error('规整结果应为 1110111（命案A~G 依次：' + names.join('、') + '），实际 ' + got + '，模型=' + dump);
+  return `联动：${st()}；规整：${got}（当前 ${wantLevel} 命）`;
+});
+
+check('D⑤：快捷开关高命座手法（弹窗列表、设置命座、导出 consRequirement）', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const mk = (name, ch, mode, target, enabled) => {
+    makeAction(ch, 4, { name, action: 'e', conditionText: 'low-hp' });
+    const a = g('state').strategy.actions.find(x => x.name === name);
+    a.consMode = mode; a.consTarget = target; a.consEnabled = enabled;
+    return a;
+  };
+  const A = mk('命座A', '芙宁娜', 'open', 2, false);
+  const B = mk('命座B', '芙宁娜', 'open', 4, false);
+  const C = mk('命座C', '钟离', 'open', 1, false);
+  const N = makeAction('钟离', 4, { name: '无命座要求动作', action: 'e' });
+  g('setTab')('info');
+  const html = $('paneInfo').innerHTML;
+  if (!html.includes('快捷开关高命座手法')) throw new Error('「当前文件状态」里没有快捷开关按钮');
+  g('app').handlers['cons-switch']();
+  const body = () => $('modalBody').innerHTML;
+  if (!$('modalTitle').innerHTML.includes('快捷开关高命座手法')) throw new Error('弹窗没有打开：' + $('modalTitle').innerHTML);
+  if (!body().includes('芙宁娜') || !body().includes('钟离')) throw new Error('列表里应当有两个角色：' + body().slice(0, 200));
+  if (body().includes('无命座要求动作')) throw new Error('弹窗列表只应列出有命座要求的角色与命座');
+  if (!body().includes('当前按 不启用高命手法')) throw new Error('初始应当显示「不启用高命手法」');
+  // 点芙宁娜的「4 命」→ 目标命座 ≤4 的动作全部启用
+  const btns = $('modalBody').querySelectorAll('[data-cons-set]');
+  const fuRows = btns.filter(b => b.getAttribute('data-cons-level') !== null);
+  if (!fuRows.length) throw new Error('弹窗里没有可点的命座按钮');
+  const setLevel = (char, level) => {
+    const row = btns.find(b => {
+      const i = Number(b.getAttribute('data-cons-set'));
+      const chs = g('consCharacters')(g('state').strategy.actions);
+      return chs[i] === char && Number(b.getAttribute('data-cons-level')) === level;
+    });
+    if (!row) throw new Error(`找不到「${char} ${level} 命」的按钮`);
+    row.dispatch('click');
+  };
+  setLevel('芙宁娜', 4);
+  if (!A.consEnabled || !B.consEnabled) throw new Error('设置 4 命后 A、B 都该启用：' + JSON.stringify([A.consEnabled, B.consEnabled]));
+  if (C.consEnabled) throw new Error('设置芙宁娜的命座不该影响钟离');
+  setLevel('钟离', 1);
+  if (!C.consEnabled) throw new Error('钟离设置 1 命后 C 该启用');
+  setLevel('芙宁娜', 6);
+  if (!A.consEnabled || !B.consEnabled) throw new Error('设置 6 命后 A、B 仍应启用');
+  setLevel('芙宁娜', 0);
+  if (A.consEnabled || B.consEnabled) throw new Error('设置「不启用高命手法」后 A、B 都该停用');
+  const nodeA = g('buildJson')().actions.find(x => x.name === '命座A');
+  // A 是「达到命座开启 + 2 命」：停用时它仍然是「开启」（符号为正），
+  // 只是 expression 里那个布尔值变成 false —— 这正是「数值相同、语义不同」的那一对。
+  if (nodeA.consRequirement !== 2) throw new Error('A 停用后应写 consRequirement=2（模式是开启），实际 ' + JSON.stringify(nodeA.consRequirement) + '：' + JSON.stringify(nodeA));
+  if (nodeA.condition.expression !== '(low-hp) && (false)') throw new Error('A 停用后表达式应为 false：' + nodeA.condition.expression);
+  if (!nodeA.consRequirement || !('consRequirement' in nodeA)) throw new Error('有命座要求的动作必须写出 consRequirement');
+  setLevel('芙宁娜', 2);
+  const nodeA2 = g('buildJson')().actions.find(x => x.name === '命座A');
+  if (nodeA2.consRequirement !== 2 || nodeA2.condition.expression !== '(low-hp) && (true)') throw new Error('设置 2 命后 A 应启用并写 +2：' + JSON.stringify(nodeA2));
+  // 再把 A 的模式改成「达到命座关闭」（勾选状态不变）：语义随之翻面（达到 2 命时停用），
+  // 数值的符号也跟着从 +2 变成 -2，expression 里那个布尔值同时变成 false。
+  g('state').strategy.actions.find(x => x.name === '命座A').consMode = 'close';
+  const nodeA3 = g('buildJson')().actions.find(x => x.name === '命座A');
+  if (nodeA3.consRequirement !== -2 || nodeA3.condition.expression !== '(low-hp) && (false)') throw new Error('把模式改成「达到命座关闭」后应写 -2 且表达式为 false：' + JSON.stringify(nodeA3));
+  g('closeModal')(null);
+  return '弹窗按角色分组、设置命座后 consRequirement 与 expression 同步变化';
+});
+
+check('D⑥：模拟队伍过滤的「保存队伍 / 加载队伍」（本地、最多 20 支、可删除）', () => {
+  dom.localStorage.removeItem('bgi_strategy_editor_teams_v1');
+  g('state').ui.team = ['芙宁娜', '枫原万叶'];
+  g('setTab')('preview');
+  if (!$('panePreview').innerHTML.includes('保存队伍') || !$('panePreview').innerHTML.includes('加载队伍')) throw new Error('预览页缺少「保存队伍 / 加载队伍」按钮');
+  // 没选满 4 人时只提醒、不弹保存框
+  g('app').handlers['team-save']();
+  if (!$('modalTitle').innerHTML.includes('还不能保存队伍')) throw new Error('未选满时应当提醒继续添加角色：' + $('modalTitle').innerHTML);
+  g('closeModal')(null);
+  // 选满 4 人 → 保存
+  g('state').ui.team = ['芙宁娜', '枫原万叶', '钟离', '纳西妲'];
+  g('app').handlers['team-save']();
+  if (!$('modalTitle').innerHTML.includes('保存队伍')) throw new Error('选满 4 人后应当弹保存框');
+  const input = $('teamNameInput');
+  if (!input) throw new Error('保存框里没有队伍名输入框');
+  input.value = '锄地队';
+  $('modalFoot').children.find(b => b.textContent === '保存').click();
+  const saved = g('loadSavedTeams')();
+  if (saved.length !== 1 || saved[0].name !== '锄地队' || saved[0].team.join(',') !== '芙宁娜,枫原万叶,钟离,纳西妲') throw new Error('队伍没有正确保存：' + JSON.stringify(saved));
+  if (!$('modalTitle').innerHTML.includes('已保存队伍')) throw new Error('保存后应给出确认：' + $('modalTitle').innerHTML);
+  g('closeModal')(null);
+  // 再存一支，然后清空当前队伍并从弹窗里加载
+  g('state').ui.team = ['钟离', '纳西妲', '芙宁娜', '枫原万叶'];
+  g('app').handlers['team-save']();
+  $('teamNameInput').value = '备用队';
+  $('modalFoot').children.find(b => b.textContent === '保存').click();
+  g('closeModal')(null);
+  if (g('loadSavedTeams')().length !== 2) throw new Error('应保存 2 支队伍');
+  g('state').ui.team = [];
+  g('app').handlers['team-load']();
+  if (!$('modalTitle').innerHTML.includes('加载队伍')) throw new Error('加载队伍弹窗没有打开');
+  if (!$('modalBody').innerHTML.includes('锄地队') || !$('modalBody').innerHTML.includes('备用队')) throw new Error('加载弹窗里没有列出已保存的队伍');
+  // 加载「备用队」
+  const rows = $('modalBody').querySelectorAll('[data-team-load]');
+  const idx = g('loadSavedTeams')().findIndex(x => x.name === '备用队');
+  const row = rows.find(r => Number(r.getAttribute('data-team-load')) === idx);
+  row.dispatch('click');
+  if (g('state').ui.team.join(',') !== '钟离,纳西妲,芙宁娜,枫原万叶') throw new Error('加载队伍没有替换当前队伍：' + g('state').ui.team.join(','));
+  if (!$('modal').classList.contains('hidden')) throw new Error('加载后弹窗应当关闭');
+  // 再打开加载弹窗，删除「锄地队」
+  g('app').handlers['team-load']();
+  const delRows = $('modalBody').querySelectorAll('[data-team-del]');
+  const delIdx = g('loadSavedTeams')().findIndex(x => x.name === '锄地队');
+  delRows.find(r => Number(r.getAttribute('data-team-del')) === delIdx).dispatch('click');
+  const left = g('loadSavedTeams')();
+  if (left.length !== 1 || left[0].name !== '备用队') throw new Error('删除队伍没有生效：' + JSON.stringify(left));
+  if (!$('modalBody').innerHTML.includes('备用队')) throw new Error('删除后列表应就地刷新');
+  g('closeModal')(null);
+  // 上限 20 支
+  const many = [];
+  for (let i = 0; i < 25; i++) many.push({ name: '队' + i, team: ['芙宁娜', '枫原万叶', '钟离', '纳西妲'] });
+  g('saveSavedTeams')(many);
+  if (g('loadSavedTeams')().length !== 20) throw new Error('本地最多只应保存 20 支，实际 ' + g('loadSavedTeams')().length);
+  dom.localStorage.removeItem('bgi_strategy_editor_teams_v1');
+  g('state').ui.team = [];
+  return '未选满提醒、保存、加载、删除、20 支上限都正确';
+});
+
+/* ==========================================================================================
+ * 本轮（保存循环 / 命座要求与触发条件的往返 / 命座要求折叠 / 搜索框）的回归用例
+ * ========================================================================================== */
+
+/** 让一个动作尽量「控件齐全」：条件、队友、其他触发条件、命座要求、注释都填上 */
+function richAction(name, ch) {
+  const r = g('addAction')(ch || '芙宁娜', 4, { name, action: 'e', conditionText: 'low-hp || q-ready' });
+  if (!r.ok) throw new Error(r.error);
+  const a = g('state').strategy.actions.find(x => x.id === r.action.id);
+  a.teammates.include = ['枫原万叶'];
+  a.teammates.includeOps = [];
+  a.morePriorities.push({ id: g('newId')(), text: 'q-ready', priority: 40000, cmp: 'after', scope: { type: 4, element: '', character: '' }, manualPriority: false });
+  a.consMode = 'open'; a.consTarget = 3; a.consEnabled = true;
+  a.consRequirement = g('consRequirementOf')(a);
+  a.tags = '说明文字';
+  return a;
+}
+
+check('本轮①b：写回一次之后，界面上就不该再有「与模型不一致」的控件', () => {
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  richAction('写回e');
+  // 再加两条同角色动作：这样卡片里会出现「自动排除」的一排勾选框（最容易出现假差异的地方）
+  const b = richAction('写回q');
+  b.type = 5; b.slot = 1;
+  const c = richAction('写回a');
+  c.type = 8; c.slot = 1;
+  c.teammates.autoExcludeSameType = true;
+  g('recomputeIndexes')(g('state').strategy.actions);
+  g('state').ui.characterSearch = '';
+  g('setTab')('actions');
+  g('renderAll')();
+  // 统计每个字段处理器被调用的次数（写回时才会调用）
+  g(`
+    if (typeof __hcount === 'undefined') {
+      __hcount = 0;
+      for (const k of Object.keys(app.fieldHandlers)) {
+        const f = app.fieldHandlers[k];
+        app.fieldHandlers[k] = function () { __hcount++; return f.apply(null, arguments); };
+      }
+    }
+  `);
+  g('flushDomToModel()');           // 第一次写回：允许它把界面上真正没进模型的编辑写回去
+  g('__hcount = 0');
+  g('flushDomToModel()');           // 第二次：界面上已经全部与模型一致，不该再写回任何东西
+  const n = g('__hcount');
+  if (n !== 0) throw new Error(`重复写回了 ${n} 个控件 —— 这正是「保存 → 写回 → 再保存」死循环的来源（界面值没和模型对齐）`);
+  return '第二次写回 0 次字段写入（含 3 条同角色动作的自动排除勾选框）';
+});
+
+check('本轮①b2：真实示例策略（28 条动作）下，写回也不该有任何「假差异」', () => {
+  dom.localStorage.clear();
+  const sample = JSON.parse(fs.readFileSync(findSampleJson(), 'utf8'));
+  const res = g('analyzeImport')(sample);
+  if (res.fatal.length) throw new Error(res.fatal.join('；'));
+  g('applyImport')(res);
+  const plan = g('planRenumber')();
+  if (plan.error) throw new Error(plan.error);
+  g('applyRenumber')(plan);
+  const countDiffs = () => {
+    g(`
+      __diffs = [];
+      if (typeof __diffWrapped === 'undefined') {
+        __diffWrapped = true;
+        const __f0 = flushOneField;
+        flushOneField = function (el) {
+          const kind = el.getAttribute && el.getAttribute('data-kind');
+          const field = el.getAttribute && el.getAttribute('data-field');
+          if (kind && field && fieldDiffers(kind, el.getAttribute('data-id') || '', field, el.getAttribute('data-idx') || '', el)) {
+            __diffs.push(kind + '.' + field + '[' + (el.getAttribute('data-idx') || '') + '] value=' + JSON.stringify(el.value) + ' checked=' + el.checked);
+          }
+          return __f0.apply(null, arguments);
+        };
+      }
+    `);
+    g('flushDomToModel()');
+    return g('__diffs');
+  };
+  const out = [];
+  for (const ch of ['芙宁娜', '']) {
+    g('state').ui.editingCharacter = ch;
+    g('setTab')('actions');
+    g('renderAll')();
+    countDiffs();
+    const second = countDiffs();
+    if (second.length) throw new Error(`「${ch || '当前角色'}」页面在第二次写回时仍有 ${second.length} 处差异：` + [...new Set(second)].slice(0, 5).join(' / '));
+    out.push(`${ch || '当前角色'}=0`);
+  }
+  return out.join('，');
+});
+
+check('本轮③：命座要求是可展开项，默认收起；摘要显示模式 / 目标命座数 / 勾选时才有「达到目标命座」', () => {
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const A = richAction('折叠A');                              // 开启 3 命 + 勾选
+  A.consMode = 'open'; A.consTarget = 3; A.consEnabled = true;
+  const B = richAction('折叠B');                              // 关闭 6 命 + 不勾选
+  B.consMode = 'close'; B.consTarget = 6; B.consEnabled = false;
+  const C = richAction('折叠C');                              // 无命座要求
+  C.consMode = 'none'; C.consTarget = 0; C.consEnabled = false;
+  g('state').ui.detailsOpen = {};                             // 不残留上一次会话的展开状态
+  g('setTab')('actions');
+  g('renderActionsPanel')();
+  const sumOf = (id) => {
+    const d = dom.document.querySelector(`details[data-details="${id}:cons"]`);
+    if (!d) throw new Error('找不到命座要求的可展开项');
+    if (d.open) throw new Error('命座要求默认应当是收起的');
+    return d.querySelector('summary').textContent;
+  };
+  const sA = sumOf(A.id), sB = sumOf(B.id), sC = sumOf(C.id);
+  if (!sA.includes('命座要求')) throw new Error('摘要里没有「命座要求」：' + sA);
+  if (!sA.includes('达到命座开启') || !sA.includes('3 命')) throw new Error('摘要应显示模式与目标命座数：' + sA);
+  if (!sA.includes('达到目标命座')) throw new Error('勾选时应显示「达到目标命座」：' + sA);
+  if (!sB.includes('达到命座关闭') || !sB.includes('6 命')) throw new Error('摘要应显示模式与目标命座数：' + sB);
+  if (sB.includes('达到目标命座')) throw new Error('没勾选时不该显示「达到目标命座」：' + sB);
+  if (!sC.includes('无命座要求')) throw new Error('无命座要求时摘要不对：' + sC);
+  // 展开之后那三个控件还在（只是被 details 收起来了）
+  const d = dom.document.querySelector(`details[data-details="${A.id}:cons"]`);
+  if (d.querySelectorAll('select[data-kind="cons"]').length !== 2) throw new Error('命座要求里应有模式与目标命座数两个下拉');
+  if (d.querySelectorAll('input[data-kind="cons"][data-field="enabled"]').length !== 1) throw new Error('命座要求里应有启用/停用勾选框');
+  return `A:${sA.trim()} / B:${sB.trim()} / C:${sC.trim()}`;
+});
+
+check('本轮④：「添加其他触发条件」的提示已缩短为「先添加、再在新增条目里填」', () => {
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const a = g('addAction')('芙宁娜', 4, { name: '提示e', action: 'e' });
+  g('state').ui.collapsed[a.action.id] = false;
+  g('state').ui.detailsOpen[`${a.action.id}:moreadd`] = true;
+  g('renderActionsPanel')();
+  const html = $('paneActions').innerHTML;
+  const want = '请先点下面的按钮把这条其他触发条件加进列表，再在新增条目里的「编辑触发条件与优先级」里填写触发条件。';
+  if (!html.includes(want)) throw new Error('提示文案没有更新：' + want);
+  if (html.includes('这里不再提供触发条件输入框')) throw new Error('旧的长提示文案还在');
+  if (html.includes('还没添加就编辑、结果内容没保存')) throw new Error('旧的长提示文案还在');
+  return '提示已缩短';
+});
+
+check('本轮⑤：角色搜索支持角色表里的其它写法（只用于筛选，界面只显示标准名）', () => {
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '枫原万叶';
+  g('addAction')('神里绫华', 4, { name: '绫华e', action: 'e' });
+  g('addAction')('琴', 4, { name: '琴e', action: 'e' });
+  const ayaka = g('getAvatar')('神里绫华');
+  const prose = (ayaka.alias || []).find(x => x === '白鹭公主');
+  if (!prose) throw new Error('角色表里没有带搜索用写法的测试数据（白鹭公主）');
+  // 直接测命中函数
+  if (!g('avatarHitAll')(ayaka, '白鹭公主')) throw new Error('命中判断没有算上角色表里的其它写法');
+  if (g('avatarHitAll')(ayaka, '钟离')) throw new Error('不该误命中');
+  // 标准名 / id / 编号的判断保持不变
+  const codeLabel = g('avatarCodeLabel')(ayaka);
+  if (!g('avatarHitAll')(ayaka, '神里')) throw new Error('标准名搜索被破坏了');
+  if (!g('avatarHitAll')(ayaka, String(ayaka.id))) throw new Error('id 搜索被破坏了');
+  if (!g('avatarMatchesQuery')('神里绫华', '绫华')) throw new Error('标准名搜索被破坏了');
+  if (!g('avatarMatchesQuery')('神里绫华', codeLabel)) throw new Error('编号搜索被破坏了：' + codeLabel);
+  if (!g('avatarMatchesQuery')('神里绫华', String(ayaka.seq).padStart(2, '0'))) throw new Error('角色序号搜索被破坏了');
+  if (!g('avatarMatchesQuery')('神里绫华', '白鹭公主')) throw new Error('角色下拉的命中判断没有算上其它写法');
+  // 角色列表：按其它写法能筛出标准名，且不同时筛出别的角色
+  g('state').ui.characterSearch = '白鹭公主';
+  g('setTab')('actions');
+  g('renderActionsPanel')();
+  const list = g('filteredAvatars')().map(x => x.key);
+  if (!list.includes('神里绫华')) throw new Error('按其它写法没有筛出神里绫华：' + JSON.stringify(list));
+  if (list.includes('琴')) throw new Error('按其它写法筛出了不该出现的角色：' + JSON.stringify(list));
+  // 界面上一律只显示标准名：那串写法只允许出现在搜索框的 value 里（用户自己输进去的）
+  const html = $('paneActions').innerHTML;
+  const cnt = html.split('白鹭公主').length - 1;
+  if (cnt !== 1 || !html.includes(`value="白鹭公主"`)) throw new Error('搜索用的写法出现在了搜索结果里（只允许作为搜索框里用户输入的内容）：' + cnt);
+  // 同一个搜索词同时命中「某角色的标准名」与「另一角色的其它写法」时，两个角色要一起显示
+  const qin = g('getAvatar')('琴');
+  qin.alias = ['神里'];             // 临时给「琴」一个与「神里绫华」标准名重合的写法
+  g('state').ui.characterSearch = '神里';
+  g('renderActionsPanel')();
+  const mixed = g('filteredAvatars')().map(x => x.key);
+  if (!mixed.includes('琴')) throw new Error('按其它写法命中的角色没有出现：' + JSON.stringify(mixed));
+  if (!mixed.includes('神里绫华')) throw new Error('按标准名命中的角色没有一起出现：' + JSON.stringify(mixed));
+  if (mixed.includes('钟离')) throw new Error('既没按标准名也没按其它写法命中的角色不该出现：' + JSON.stringify(mixed));
+  // 角色选择弹窗的搜索框同样按其它写法筛选
+  g('state').ui.characterSearch = '';
+  g('renderActionsPanel')();
+  g('pickAvatarsLive')({ title: '选择角色', selected: [], allowCurrent: true });
+  $('pkSearch').value = '白鹭公主';
+  $('pkSearch').oninput({ target: $('pkSearch') });
+  const rows = $('pkList').innerHTML;
+  if (!rows.includes('神里绫华')) throw new Error('角色选择弹窗没按其它写法筛出神里绫华');
+  if (rows.includes('琴')) throw new Error('角色选择弹窗按其它写法筛出了别的角色');
+  g('closeModal')(null);
+  return '命中判断 / 角色列表 / 角色选择弹窗都生效，且只显示标准名';
+});
+
+check('本轮②：触发条件与命座要求在「导出 → 导入」后逐字不变（含多余的括号）', () => {
+  /** 用当前模型导出、回读、再导出，返回两次导出的 JSON 与回读后的模型快照 */
+  const roundTrip = () => {
+    const before = g('buildJson')();
+    const res = g('analyzeImport')(JSON.parse(JSON.stringify(before)));
+    if (res.fatal.length) throw new Error('回读失败：' + res.fatal.join('；'));
+    g('applyImport')(res);
+    const after = g('buildJson')();
+    const snap = (j) => JSON.stringify(j.actions.find(x => x.name === '往返e').condition) + '|' +
+      JSON.stringify(g('state').strategy.actions.filter(x => x.name === '往返e').map(x => [x.consMode, x.consTarget, x.consEnabled, x.teammates.include, x.teammates.exclude, x.teammates.autoExcludeSameType]));
+    return { before, after, snap: snap(after) };
+  };
+  const cases = [
+    { cond: 'low-hp || q-ready', inc: ['枫原万叶'], exc: [], cons: ['open', 3, true] },
+    { cond: 'low-hp || q-ready', inc: ['枫原万叶'], exc: [], cons: ['open', 3, false] },
+    { cond: 'low-hp || q-ready', inc: ['枫原万叶'], exc: [], cons: ['close', 3, true] },
+    { cond: 'low-hp || q-ready', inc: ['枫原万叶'], exc: [], cons: ['close', 3, false] },
+    { cond: 'low-hp', inc: [], exc: [], cons: ['open', 2, true] },              // 没有队友条件：以前这里会多出一层括号
+    { cond: '', inc: [], exc: [], cons: ['open', 2, false] },                    // 空条件：以前会变成 (true)
+    { cond: '', inc: ['枫原万叶'], exc: [], cons: ['open', 2, false] },
+    { cond: 'low-hp', inc: ['枫原万叶'], exc: ['钟离'], cons: ['close', 2, true] },
+    { cond: 'low-hp', inc: ['枫原万叶'], exc: ['钟离', '纳西妲'], cons: null },
+    { cond: 'low-hp', inc: [], exc: [], cons: null, more: ['q-ready', 't > 5'] },
+  ];
+  const seen = [];
+  for (const c of cases) {
+    dom.localStorage.clear();
+    g('state').strategy.actions = [];
+    g('state').strategy.info = { name: '往返', author: '', version: '', description: '', config: {}, preActions: [] };
+    g('state').ui.editingCharacter = '芙宁娜';
+    const r = g('addAction')('芙宁娜', 4, { name: '往返e', action: 'e', conditionText: c.cond });
+    if (!r.ok) throw new Error(r.error);
+    const a = g('state').strategy.actions.find(x => x.id === r.action.id);
+    a.teammates.include = c.inc.slice();
+    a.teammates.includeOps = c.inc.length > 1 ? ['and'] : [];
+    a.teammates.exclude = c.exc.slice();
+    a.teammates.excludeOps = c.exc.length > 1 ? ['or'] : [];
+    a.teammates.autoExcludeSameType = true;
+    (c.more || []).forEach((t, i) => a.morePriorities.push({ id: g('newId')(), text: t, priority: 40000 + i * 1000, cmp: 'after', scope: { type: 4, element: '', character: '' }, manualPriority: false }));
+    if (c.cons) { a.consMode = c.cons[0]; a.consTarget = c.cons[1]; a.consEnabled = c.cons[2]; }
+    else { a.consMode = 'none'; a.consTarget = 0; a.consEnabled = false; }
+    a.consRequirement = g('consRequirementOf')(a);
+    const wantCond = c.cond;
+    const r1 = roundTrip();
+    // 1) 回读后的触发条件必须与用户写的一字不差（不许多括号）
+    const back = g('state').strategy.actions.find(x => x.name === '往返e');
+    if (back.conditionText !== wantCond) {
+      throw new Error(`触发条件没有原样还原：${JSON.stringify(wantCond)} → ${JSON.stringify(back.conditionText)}（表达式 ${JSON.stringify(r1.before.actions[0].condition.expression)}）`);
+    }
+    // 2) 命座要求的三元组必须原样还原
+    if (c.cons) {
+      const got = [back.consMode, back.consTarget, !!back.consEnabled];
+      if (got[0] !== c.cons[0] || got[1] !== c.cons[1] || got[2] !== c.cons[2]) {
+        throw new Error(`命座要求没有原样还原：${JSON.stringify(c.cons)} → ${JSON.stringify(got)}`);
+      }
+    } else if (back.consMode !== 'none') throw new Error('无命座要求被还原成了有理要求');
+    // 3) 队友条件的选择原样还原
+    if (back.teammates.include.join(',') !== c.inc.join(',') || back.teammates.exclude.join(',') !== c.exc.join(',')) {
+      throw new Error(`队友条件没有原样还原：${JSON.stringify(c.inc)}/${JSON.stringify(c.exc)} → ${JSON.stringify(back.teammates.include)}/${JSON.stringify(back.teammates.exclude)}`);
+    }
+    // 4) 再导出一次必须与第一次逐字一致（多个 morePriorities 也要一致）
+    if (JSON.stringify(r1.after) !== JSON.stringify(r1.before)) {
+      throw new Error('往返之后导出的 JSON 变了：\n  前 ' + JSON.stringify(r1.before) + '\n  后 ' + JSON.stringify(r1.after));
+    }
+    seen.push(JSON.stringify(wantCond) + (c.cons ? '/' + c.cons.join('') : '/none'));
+  }
+  // 草稿（localStorage 里的那份 JSON）走的是同一条回读路径，单独再验一次
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  makeAction('芙宁娜', 4, { name: '往返e', action: 'e', conditionText: 'low-hp || q-ready' });
+  const liveA = g('state').strategy.actions[0];
+  liveA.consMode = 'close'; liveA.consTarget = 4; liveA.consEnabled = false;
+  liveA.teammates.include = ['枫原万叶'];
+  const jsonBefore = g('buildJson')();
+  g('saveDraftNow')();
+  const drafts = JSON.parse(dom.localStorage.getItem(g('LS_DRAFT')) || '{}');
+  const key = Object.keys(drafts)[0];
+  if (!key) throw new Error('草稿没有写进 localStorage');
+  g('applyImport')(g('analyzeImport')(drafts[key].json));
+  if (JSON.stringify(g('buildJson')()) !== JSON.stringify(jsonBefore)) throw new Error('载入草稿后导出的 JSON 与原文件不一致');
+  return `${cases.length} 组往返 + 草稿往返都逐字一致`;
+});
+
 const asyncChecks = [];
 const tick = () => new Promise(r => setTimeout(r, 0));
 const checkAsync = (name, fn) => asyncChecks.push([name, fn]);
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+checkAsync('本轮①a：编辑任意一处内容只落一次盘，之后不再反复保存 / 重建面板，输入框也不会被取消选中', async () => {
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').strategy.info = { name: '循环', author: '', version: '', description: '', config: {}, preActions: [] };
+  g('state').ui.editingCharacter = '芙宁娜';
+  const a = richAction('循环e');
+  const sibling = richAction('循环q');       // 同角色的第二条动作：卡片里会有「自动排除」勾选框
+  sibling.type = 5; sibling.slot = 1;
+  g('recomputeIndexes')(g('state').strategy.actions);
+  const mp = a.morePriorities[0];
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.detailsOpen = { [`${a.id}:more:0`]: true, [`${a.id}:moreadd`]: true };
+  g('setTab')('actions');
+  g('renderActionsPanel')();
+  // 计数器：落盘次数 / 面板重建次数 / 条件文本写回次数
+  g(`
+    __saves = 0; __rebuilds = 0;
+    const __sd0 = saveDraftNow; saveDraftNow = function () { __saves++; return __sd0.apply(null, arguments); };
+    const __rf0 = refresh; refresh = function () { __rebuilds++; return __rf0.apply(null, arguments); };
+    const __rc0 = rerenderCurrent; rerenderCurrent = function () { __rebuilds++; return __rc0.apply(null, arguments); };
+  `);
+  const q = (sel) => dom.document.querySelector(sel);
+  const edits = [
+    { name: '动作名称', el: () => q(`#paneActions input[data-kind="act"][data-field="name"]`), ev: 'input', value: '循环e2' },
+    { name: '动作指令', el: () => q(`#paneActions textarea[data-kind="act"][data-field="action"]`), ev: 'input', value: 'e,wait(0.2)' },
+    { name: '触发条件', el: () => q(`#paneActions textarea[data-kind="condtext"][data-field="text"]`), ev: 'input', value: 'low-hp && q-ready' },
+    { name: '注释', el: () => q(`#paneActions textarea[data-kind="act"][data-field="tags"]`), ev: 'input', value: '改过的注释' },
+    { name: '其他触发条件的触发条件', el: () => q(`#paneActions textarea[data-kind="moretext"][data-field="text"]`), ev: 'input', value: 't > 3' },
+    { name: '命座要求的模式', el: () => q(`#paneActions select[data-kind="cons"][data-field="mode"]`), ev: 'change', value: 'close' },
+    { name: '命座要求的勾选', el: () => q(`#paneActions input[data-kind="cons"][data-field="enabled"]`), ev: 'change', value: null },
+    { name: '自动排除的勾选', el: () => q(`#paneActions input[data-kind="team"][data-field="autoExclude"]`), ev: 'change', value: null },
+    { name: '尾数', el: () => q(`#paneActions select[data-kind="act"][data-field="slot"]`), ev: 'change', value: '2' },
+  ];
+  const notes = [];
+  for (const e of edits) {
+    const el = e.el();
+    if (!el) throw new Error('找不到控件：' + e.name);
+    g('__saves = 0; __rebuilds = 0;');
+    el.focus();
+    if (typeof el.setSelectionRange === 'function' && el.type !== 'checkbox') el.setSelectionRange(0, 0);
+    if (e.ev === 'change' && el.type === 'checkbox') el.checked = !el.checked;
+    else el.value = e.value;
+    el.dispatch(e.ev);
+    const immediate = g('__rebuilds');     // 有些改动本来就要重建一次面板（例如改动作类型）
+    await sleep(900);                      // 跨过 600ms 的自动保存定时器
+    const saves = g('__saves');
+    const extra = g('__rebuilds') - immediate;
+    if (saves !== 1) throw new Error(`编辑「${e.name}」之后应当只落一次盘，实际 ${saves} 次（说明保存/写回在自激）`);
+    if (extra !== 0) throw new Error(`编辑「${e.name}」之后又重建了 ${extra} 次面板（选区与光标就是这样被清掉的）`);
+    if (dom.document.activeElement !== el) throw new Error(`编辑「${e.name}」之后输入框被取消选中了`);
+    notes.push(`${e.name}:1 次落盘`);
+    await sleep(700);                      // 再等一个定时器周期：确认没有第二次保存
+    if (g('__saves') !== 1) throw new Error(`编辑「${e.name}」之后仍在反复落盘（第二个周期又存了一次）`);
+    // 面板可能在别的用例里被重建：重新渲染后再测下一个控件
+    g('renderActionsPanel')();
+  }
+  return notes.join('；');
+});
+
+checkAsync('本轮①c：点角色（不改任何内容）不该触发草稿保存，也不该把角色列表滚回顶部', async () => {
+  dom.localStorage.clear();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  richAction('选人e');           // 带命座要求等全套控件
+  richAction('选人q');           // 再来一条同角色动作：卡片里会有「自动排除」勾选框
+  g('setTab')('actions');
+  g('renderActionsPanel')();
+  g(`
+    __saves = 0; __rebuilds = 0;
+    const __sd1 = saveDraftNow; saveDraftNow = function () { __saves++; return __sd1.apply(null, arguments); };
+    const __rf1 = refresh; refresh = function () { __rebuilds++; return __rf1.apply(null, arguments); };
+  `);
+  const list = q => dom.document.querySelector(q);
+  const scroller = list('#paneActions [data-scroll="charlist"]');
+  if (!scroller) throw new Error('找不到角色列表的滚动容器');
+  scroller.scrollTop = 120;
+  // 点「琴」这一行（角色列表里的条目）
+  const row = dom.document.querySelectorAll('[data-act="pick-char"]').find(x => x.getAttribute('data-char') === '琴');
+  if (!row) throw new Error('角色列表里找不到琴');
+  row.dispatch('click');
+  // 选角色本身会重建一次面板（这是设计如此：右边要换成那个角色的动作），
+  // 但**只能有这一次** —— 以前写回时的假差异会再触发 refresh，把列表顶回顶部并连带落盘。
+  const afterClick = g('__rebuilds');
+  if (afterClick !== 1) throw new Error(`选角色应当只重建 1 次面板，实际 ${afterClick} 次`);
+  await sleep(900);
+  if (g('__saves') !== 0) throw new Error(`只是选了个角色，却落盘了 ${g('__saves')} 次（内容并没有被编辑）`);
+  if (g('__rebuilds') !== 1) throw new Error(`选角色之后又额外重建了 ${g('__rebuilds') - 1} 次面板（重建会让列表弹回顶部）`);
+  const after = dom.document.querySelector('#paneActions [data-scroll="charlist"]');
+  if (!after) throw new Error('选角色之后角色列表不见了');
+  if (after.scrollTop !== 120) throw new Error(`角色列表的滚动位置被重置了：${after.scrollTop}（应当恢复成 120）`);
+  if (g('state').ui.editingCharacter !== '琴') throw new Error('选中的角色没有生效');
+  return '未落盘、未重建、滚动位置保留';
+});
+
 checkAsync('回归⑤b：角色选择弹窗允许同一个角色重复添加', async () => {
   g('state').strategy.actions = [];
   g('state').ui.editingCharacter = '枫原万叶';
@@ -2000,6 +3303,69 @@ checkAsync('合并界面③：点「导入的版本改名后保留」→ 新名�
   if (v.errors.length) throw new Error('合并后不应有错误：' + v.errors.map(x => x.text).join('；'));
   g('state').strategy.actions = [];
   return `芙芙e 保留（${old.index}），芙芙e2 新增（${fresh.index}）`;
+});
+
+checkAsync('⑦ 复制动作给指定角色（异步确认）：改名 + 按目标角色重新分配 index', async () => {
+  g('closeModal')(null);
+  await tick();
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '枫原万叶';
+  const a = makeAction('枫原万叶', 4, { name: '枫原万叶e', action: 'e,wait(0.3)' });
+  if (g('state').strategy.actions.length !== 1) throw new Error('前置清理不干净：' + g('state').strategy.actions.map(x => x.name).join(','));
+  a.conditionText = 'low-hp && since(1) > 2';
+  a.morePriorities.push({ id: g('newId')(), text: 'low-hp', priority: 10000, cmp: 'after', scope: { type: 4, element: '', character: '' }, manualPriority: false });
+  g('state').ui.collapsed[a.id] = false;
+  g('renderActionsPanel')();
+  // 复制给钟离（钟离还没有同名动作）：标准名换成目标角色
+  g('app').handlers['card-dup']({ getAttribute: () => a.id }, {});
+  await tick();
+  const row0 = dom.window.$('cpList').children.filter(r => r.classList.contains('roleitem'))
+    .find(r => r.querySelector('[data-cppick]').getAttribute('data-cppick') === '钟离');
+  if (!row0) throw new Error('复制弹窗里找不到钟离');
+  row0.querySelector('[data-cppick]').click();
+  await tick();
+  const toZhong = g('state').strategy.actions.find(x => x.character === '钟离');
+  if (!toZhong) throw new Error('没有复制给钟离：' + g('state').strategy.actions.map(x => x.name + '/' + x.character).join(','));
+  if (toZhong.name !== '钟离e') throw new Error('动作名里的标准名应换成目标角色：' + toZhong.name + '（当前动作：' + g('state').strategy.actions.map(x => x.name).join(',') + '）');
+  if (toZhong.index !== g('makeIndex')(4, 6, 2, 1)) throw new Error('复制给钟离的 index 不对：' + toZhong.index + '（钟离 = 岩元素号 6 · 编号 02 · 类型 4 · 尾数 1）');
+  if (toZhong.action !== 'e,wait(0.3)' || toZhong.conditionText !== 'low-hp && since(1) > 2') throw new Error('复制给钟离的内容不对');
+  // 复制给芙宁娜（芙宁娜还没有动作）：同样是标准名替换
+  g('app').handlers['card-dup']({ getAttribute: () => a.id }, {});
+  await tick();
+  const cp = dom.window.$('cpSearch');
+  cp.value = '芙宁娜';
+  cp.dispatch('input');
+  const row = dom.window.$('cpList').children.filter(r => r.classList.contains('roleitem'))
+    .find(r => r.querySelector('[data-cppick]').getAttribute('data-cppick') === '芙宁娜');
+  if (!row) throw new Error('搜索后找不到芙宁娜');
+  row.querySelector('[data-cppick]').click();
+  await tick();
+  const copied = g('state').strategy.actions.find(x => x.character === '芙宁娜');
+  if (!copied) throw new Error('没有复制出动作：' + g('state').strategy.actions.map(x => x.name).join(','));
+  if (copied.name !== '芙宁娜e') throw new Error('动作名里的标准名应换成目标角色：' + copied.name);
+  if (copied.index !== g('makeIndex')(4, 3, 11, 1)) throw new Error('复制出来的动作 index 不对：' + copied.index);
+  if (copied.action !== 'e,wait(0.3)') throw new Error('复制出来的指令不对：' + copied.action);
+  if (copied.conditionText !== 'low-hp && since(1) > 2') throw new Error('复制出来的条件不对：' + copied.conditionText);
+  if ((copied.morePriorities || []).length !== 1) throw new Error('复制出来的其他触发条件数量不对：' + (copied.morePriorities || []).length);
+  if (copied.morePriorities[0].id === a.morePriorities[0].id) throw new Error('复制出来的其他触发条件应使用新的内部 id');
+  // 再复制给本角色 → 名称后加数字、尾数顺延
+  g('state').ui.editingCharacter = '枫原万叶';
+  g('renderActionsPanel')();
+  g('app').handlers['card-dup']({ getAttribute: () => a.id }, {});
+  await tick();
+  const selfRow = dom.window.$('cpList').children.filter(r => r.classList.contains('roleitem'))
+    .find(r => r.querySelector('[data-cppick]').getAttribute('data-cppick') === '枫原万叶');
+  if (!selfRow) throw new Error('复制弹窗里应有「本角色」这一项');
+  selfRow.querySelector('[data-cppick]').click();
+  await tick();
+  const same = g('state').strategy.actions.find(x => x.name === '枫原万叶e2');
+  if (!same) throw new Error('复制给本角色时应生成「枫原万叶e2」：' + g('state').strategy.actions.map(x => x.name).join(','));
+  if (same.character !== '枫原万叶') throw new Error('本角色复制的 character 不对：' + same.character);
+  if (same.index !== g('makeIndex')(4, 5, 5, 2)) throw new Error('本角色复制的 index 不对：' + same.index + '（应为 45052：类型 4 · 风元素 5 · 枫原万叶 05 · 尾数 2）');
+  const v = g('validateStrategy')();
+  if (v.errors.length) throw new Error('复制后不应有错误：' + v.errors.map(x => x.text).join('；'));
+  g('state').strategy.actions = [];
+  return `复制到钟离 → ${toZhong.name}(${toZhong.index})；芙宁娜 → ${copied.name}(${copied.index})；本角色 → ${same.name}(${same.index})`;
 });
 
 for (const [name, fn] of asyncChecks) {

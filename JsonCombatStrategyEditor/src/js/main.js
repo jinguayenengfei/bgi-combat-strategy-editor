@@ -7,6 +7,10 @@ const app = {
   _saveTimer: null,
   _infoPending: false,   // 「策略名称 / 版本」有修改还没写进本地草稿（等用户改完再落盘）
   _lastJson: '',
+  _saving: false,        // 正在落盘（saveDraftNow）：期间不再排新的保存
+  _flushing: false,      // 正在把界面内容写回模型（flushDomToModel）
+  _flushDirty: false,    // 写回过程中确实改动了模型 → 写回结束后补排一次保存
+  _flushPanels: null,    // 写回过程中被挡下来的面板重建 → 写回结束后统一重建一次
   lastCondField: null,   // 最后一次聚焦的条件输入框（含光标位置）
   lastQcField: null,     // 最后一次聚焦的指令输入框（含光标位置）
   ime: false,            // 输入法是否正在组字
@@ -109,20 +113,32 @@ function pruneDraftDuplicates(drafts, key) {
   }
 }
 function saveDraftNow() {
-  const drafts = loadDrafts();
-  const key = draftKey();
-  drafts[key] = { time: Date.now(), json: buildJson() };
-  pruneDraftDuplicates(drafts, key);
-  // 只保留最近 30 份，避免 localStorage 溢出
-  const keys = Object.keys(drafts);
-  if (keys.length > 30) {
-    keys.sort((a, b) => (drafts[a].time || 0) - (drafts[b].time || 0));
-    for (const k of keys.slice(0, keys.length - 30)) delete drafts[k];
+  // 落盘前把界面上还没进入模型的编辑（尤其是最后一次编辑：可能还卡在中文输入法组字里）
+  // 先写回模型，再序列化 —— 草稿里不会再有“最后一次编辑的内容”。
+  // _saving 期间 markDirty 排不出新的保存：这次落盘写的就是写回之后的模型，不需要再来一次
+  // （否则会形成「保存 → 写回 → 再排一次保存 → …」的死循环）。
+  const prevSaving = app._saving;
+  app._saving = true;
+  try {
+    flushDomToModel();
+    syncCondTextareasFromModel();
+    const drafts = loadDrafts();
+    const key = draftKey();
+    drafts[key] = { time: Date.now(), json: buildJson() };
+    pruneDraftDuplicates(drafts, key);
+    // 只保留最近 30 份，避免 localStorage 溢出
+    const keys = Object.keys(drafts);
+    if (keys.length > 30) {
+      keys.sort((a, b) => (drafts[a].time || 0) - (drafts[b].time || 0));
+      for (const k of keys.slice(0, keys.length - 30)) delete drafts[k];
+    }
+    try { localStorage.setItem(LS_DRAFT, JSON.stringify(drafts)); } catch (e) { /* 忽略 */ }
+    state.ui.lastDraft = key;
+    app._infoPending = false;
+    saveUi();
+  } finally {
+    app._saving = prevSaving;
   }
-  try { localStorage.setItem(LS_DRAFT, JSON.stringify(drafts)); } catch (e) { /* 忽略 */ }
-  state.ui.lastDraft = key;
-  app._infoPending = false;
-  saveUi();
 }
 /** 有「策略名称 / 版本」的修改还没落盘 */
 function hasPendingInfoEdit() { return !!app._infoPending; }
@@ -138,6 +154,13 @@ function flushPendingInfoEdit() {
   renderFooter();
 }
 function markDirty(defer) {
+  // 写回（flushDomToModel）过程中产生的「改脏」不在当场排保存，记一笔、等写回结束后统一排一次：
+  // 否则「保存 → 写回 → 又排一次保存 → …」会变成一个永不停歇的保存循环（界面会被反复重建，
+  // 输入框的选中与光标每次都被清掉）。写回结束后模型已经是最新的，排一次就够。
+  if (app._flushing) { app._flushDirty = true; return; }
+  // 落盘（saveDraftNow）内部触发的改脏同理：这次落盘序列化的是写回之后的模型，已经包含这次改动，
+  // 不必也不能再排一次保存。
+  if (app._saving) return;
   if (defer) {
     app._infoPending = true;
     // 草稿键依赖「策略名称 + 版本」，所以在用户改完之前不能留下任何排队的保存：
@@ -156,6 +179,7 @@ function markDirty(defer) {
 
 function setTab(tab) {
   flushPendingInfoEdit();   // 切页也算“策略名称 / 版本改完了”（浏览器里失焦已经先触发过一次，这里是兜底）
+  flushPendingEdits();      // 切页会重建面板：把还在输入框里的条件内容先写回模型
   state.ui.tab = tab;
   saveUi();
   renderChrome();
@@ -164,6 +188,7 @@ function setTab(tab) {
 function renderActivePanel() {
   const p = app.panels[state.ui.tab];
   if (p && p.render) p.render();
+  stampRenderedPanels();
 }
 function renderAll() {
   state.lastIssues = validateStrategy();
@@ -171,6 +196,7 @@ function renderAll() {
   syncDetailsState();
   renderChrome();
   renderActivePanel();
+  stampRenderedPanels();
   renderSide();
 }
 function rebuildIndexes() {
@@ -178,32 +204,315 @@ function rebuildIndexes() {
   state.strategy.actions.sort((a, b) => a.index - b.index);
 }
 function refresh(panels) {
+  // 写回（flushDomToModel）过程中不允许重建面板：写回是「保存 / 切页 / 点别的控件」顺带做的事，
+  // 在用户还可能正在输入的时候把面板整个换掉，就会把光标、选区、滚动位置一起清掉。
+  // 这里只记下「哪几个面板需要重建」，等写回结束后统一重建一次。
+  if (app._flushing) {
+    if (!app._flushPanels) app._flushPanels = new Set();
+    for (const t of (panels || [state.ui.tab])) app._flushPanels.add(t);
+    return;
+  }
   state.lastIssues = validateStrategy();
   rebuildIndexes();
   syncDetailsState();
+  const scroll = captureScroll();
   renderChrome();
   const list = panels || [state.ui.tab];
   for (const t of list) if (app.panels[t] && app.panels[t].render) app.panels[t].render();
+  stampRenderedPanels();
+  restoreScroll(scroll);
   renderSide();
   markDirty();
 }
+/** 拿一个表单元素的当前值（checkbox 取勾选状态），与 ctrlValue 一致 */
+function domFieldValue(el) {
+  return el.type === 'checkbox' ? !!el.checked : el.value;
+}
+
+/* ---------------- 「上次渲染进 DOM 的值」 ----------------
+ * 面板重建（innerHTML）之后，新节点上的 value 是渲染那一刻的模型值。
+ * 把它记在 data-rendered 上，写回模型时就有了“上次显示的是什么”这个基线：
+ * 于是可以把「用户真的改了这个下拉」与「重建 / 浏览器把下拉的值挪了位置」区分开
+ * —— 前者才该写回模型（并触发像「尾数冲突」这样的用户级提示）。
+ */
+const RENDERED_ATTR = 'data-rendered';
+
+/** 读某个控件上次渲染进 DOM 的值（没有记录时返回 undefined） */
+function renderedValueOf(el) {
+  if (!el || !el.getAttribute || !el.hasAttribute) return undefined;
+  return el.hasAttribute(RENDERED_ATTR) ? el.getAttribute(RENDERED_ATTR) : undefined;
+}
+
+/** 现在 DOM 里新渲染出来的控件都补上「上次渲染值」基线 */
+function stampRenderedValues(root) {
+  if (!root || !root.querySelectorAll) return;
+  const list = root.querySelectorAll('[data-kind]');
+  if (list && list.forEach) list.forEach(stampRenderedValue);
+}
+/** 渲染（或重建）之后：控件上「用户改过」的痕迹要重新计，之前那批控件的痕迹不再作数 */
+function stampRenderedValue(el) {
+  if (!el || !el.setAttribute) return;
+  // 基线必须与 fieldValueOf / modelFieldValue 用同一套取值口径：
+  // 勾选框要比的是 checked（不是 value —— 浏览器里勾选框的 value 恒为 "on"），
+  // 否则每次写回都会把「勾选框」判成「用户改过」，进而反复触发重建与保存。
+  let v;
+  try { v = domFieldValue(el); } catch (e) { v = el.value; }
+  try {
+    el.setAttribute(RENDERED_ATTR, String(v === null || v === undefined ? '' : v));
+    el.setAttribute(EDIT_ATTR, String(editEventSeq));
+  } catch (e) { /* 忽略 */ }
+}
+
+/* ---------------- 「这个控件上是用户改的」 ----------------
+ * 只有真的在控件上派发过 input / change（或输入法组字）事件，才认为这次变化来自用户。
+ * 用处：写回模型前，如果发现「下拉的值与模型 / 上次渲染值都不一样、但这个控件从来没收到过任何事件」，
+ * 那它就不是用户在改，而是重建面板 / 浏览器顺手把下拉的值挪了位置 —— 这时**恢复成模型里的值**，
+ * 而不是把这次意外变化当成用户操作写进模型（那会误报「尾数已被占用」甚至改动编号）。
+ * 文本输入框不参与这个判断：中文输入法组字期间 input 事件可能迟到，不能因此丢掉用户的输入。
+ */
+let editEventSeq = 0;
+const lastEditEvent = new WeakMap();
+const EDIT_ATTR = 'data-edited-at';
+
+/** 记录「这个控件刚收到了用户事件」 */
+function markUserEdit(el) {
+  if (!el || typeof el !== 'object') return;
+  try { lastEditEvent.set(el, ++editEventSeq); } catch (e) { /* 不可作为键时忽略 */ }
+}
+/** 这个控件自「上次渲染 / 上次写回」以来有没有收到过用户事件 */
+function hasUserEditSince(el) {
+  if (!el || typeof el !== 'object') return false;
+  const t = Number(el.getAttribute ? el.getAttribute(EDIT_ATTR) : NaN);
+  const ev = lastEditEvent.get(el);
+  if (!ev) return false;
+  return !Number.isFinite(t) || ev > t;
+}
+/** 渲染 / 写回之后，把「用户事件」的基准时间同步到当前 */
+function restampEditBaseline(el) {
+  if (!el || !el.setAttribute) return;
+  try { el.setAttribute(EDIT_ATTR, String(editEventSeq)); } catch (e) { /* 忽略 */ }
+}
+
+/** 模型里这个字段现在的值 */
+function modelFieldValue(kind, id, field, idx, sub) {
+  if (kind === 'act') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    if (!a) return undefined;
+    if (field === 'tags') return a.tags || '';
+    if (field === 'type' || field === 'slot' || field === 'ensureCast') return a[field];
+    return a[field];
+  }
+  if (kind === 'cons') {
+    // 命座要求的三个控件（模式 / 目标命座数 / 启用-停用勾选框）。
+    // 没有这个分支时 modelFieldValue 恒为 undefined，勾选框会被判成「永远和模型不一样」，
+    // 于是每次写回都要重建面板并再排一次保存 —— 就是那个不停歇的保存循环的源头。
+    const a = state.strategy.actions.find(x => x.id === id);
+    if (!a) return undefined;
+    const has = consHasRequirement(a);
+    if (field === 'mode') return has ? a.consMode : 'none';
+    if (field === 'target') return has ? String(Number(a.consTarget)) : '';
+    if (field === 'enabled') return consActiveState(a);
+    return undefined;
+  }
+  if (kind === 'pre') {
+    const pa = (state.strategy.info.preActions || [])[Number(idx)];
+    return pa ? (pa[field] || '') : undefined;
+  }
+  if (kind === 'condtext') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    return a ? (a.conditionText || '') : undefined;
+  }
+  if (kind === 'moretext') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    const mp = a && a.morePriorities[Number(idx)];
+    return mp ? (mp.text || '') : undefined;
+  }
+  if (kind === 'morenewtext') return (state.ui.newMoreText || {})[id];
+  if (kind === 'more') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    const mp = a && a.morePriorities[Number(idx)];
+    if (!mp) return undefined;
+    if (field === 'cmp') return mp.cmp;
+    if (field === 'stype') return mp.scope ? mp.scope.type : null;
+    if (field === 'selement') return mp.scope ? mp.scope.element : null;
+    if (field === 'scharacter') return mp.scope ? mp.scope.character : null;
+    return undefined;
+  }
+  if (kind === 'team') {
+    const a = state.strategy.actions.find(x => x.id === id);
+    if (!a) return undefined;
+    // 「新增角色前用：」的运算符：值存在 state.ui.teamFilterOps 里（键是 动作id:字段名）
+    if (field === 'newOp') return ((state.ui.teamFilterOps || {})[`${id}:${sub}`]) === 'and' ? 'and' : 'or';
+    // 「自动排除」勾选框：界面上是按「是否勾了这条其他动作」算出来的（见 renderCardTeamTab），
+    // 模型里存的却是一个 id 数组 —— 直接拿数组去比会永远「不一致」，于是每次写回都要重写一遍模型，
+    // 连带在「只是切个页 / 选个角色」的时候也排一次草稿保存。这里按界面那套算法给出真正的勾选状态。
+    if (field === 'autoExclude') {
+      const o = state.strategy.actions.find(x => x.id === sub && x.id !== a.id);
+      if (!o || (o.character || '') !== (a.character || '')) return false;
+      const listed = (a.teammates.autoExclude || []).includes(o.id);
+      const bySameType = !!a.teammates.autoExcludeSameType && o.type === a.type && (o.teammates.include || []).length > 0;
+      return listed || bySameType;
+    }
+    return a.teammates[field];
+  }
+  if (kind === 'charlist') return state.ui[field];
+  return undefined;
+}
+
+/** 界面上这个控件的值换算成「与模型同类型」的值（下拉里的数字要与模型里的数字比，不能按字符串比） */
+function fieldValueOf(kind, field, el) {
+  const v = domFieldValue(el);
+  if (typeof v !== 'string') return v;
+  if (kind === 'act' && (field === 'type' || field === 'slot')) return Number(v);
+  if (kind === 'more' && field === 'stype') return v === '' ? null : Number(v);
+  if (kind === 'more' && field === 'selement') return v === '' ? null : Number(v);
+  return v;
+}
+
+/** 两个「控件值 / 模型值」是否算同一个值（null / undefined / 空串一律视为「空」，其余按字符串比） */
+function sameFieldValue(a, b) {
+  const na = (a === undefined || a === null) ? '' : String(a);
+  const nb = (b === undefined || b === null) ? '' : String(b);
+  return na === nb;
+}
+
+/**
+ * 这个控件的内容与模型不一致吗（一致就不必写回，避免无谓的重算与排序）。
+ *
+ * 基线优先取「上次渲染进这个 DOM 节点的值」（见 RENDERED_ATTR）：与模型比本来也等价，
+ * 但控件被重建过之后，模型可能已经变了而新节点上还挂着旧值 —— 用「上次显示的是什么」当基线，
+ * 才能分辨出「用户真的改了下拉」和「重建 / 浏览器把下拉的值挪了位置」，
+ * 免得后者被当成用户操作（例如把「尾数」下拉的意外变化当成“用户要改尾数”而弹出冲突提示）。
+ */
+function fieldDiffers(kind, id, field, idx, el) {
+  const rendered = renderedValueOf(el);
+  const next = fieldValueOf(kind, field, el);
+  const sub = (el && el.getAttribute) ? (el.getAttribute('data-sub') || '') : '';
+  const cur = rendered === undefined ? modelFieldValue(kind, id, field, idx, sub) : rendered;
+  return !sameFieldValue(cur, next);
+}
+
+/** 这些字段由 input 事件即时写进模型（且已经带了各自的就地刷新逻辑），兜底时只同步条件文本 */
+const FLUSH_SKIP_FIELDS = new Set(['text', 'avatarSearch', 'search']);
+
+/**
+ * 输入框 / 下拉里的内容写回模型（模型是唯一事实来源）。
+ *
+ * 「最后一次编辑的内容」之所以会丢，根因就在这里：以前只有**正在聚焦的那个条件输入框**
+ * 会在重建面板前被写回模型（flushPendingEdits），而落盘（saveDraftNow）走的是模型 ——
+ * 一旦最近一次编辑没有及时写进模型（中文输入法组字期间 document 级的 input 被挂起、
+ * input 事件迟到，或者最后一次改动正好落在“重建面板 / 落盘”的瞬间），那次改动就只留在
+ * DOM 里：草稿里没有、界面重建后又按模型刷新回去，看起来就是“最后一次编辑消失了”。
+ * 所以这里逐个对齐：**内容与模型不同的才写**（没变就不碰，免得白白触发重算/重建排序），
+ * 写的过程不触发任何重绘，输入法与光标都不受影响。
+ * 范围限定在三个面板元素里（而不是整份 document）：既不漏掉别的页签上还没写回模型的编辑，
+ * 也不会去碰弹窗、指令快捷面板这些自己管理状态的控件。
+ */
+function flushDomToModel() {
+  if (typeof document === 'undefined') return;
+  if (app._flushing) return;               // 防重入：写回过程中不再嵌套一次写回
+  const panes = ['paneInfo', 'paneActions', 'panePreview']
+    .map(id => (typeof $ === 'function' ? $(id) : null))
+    .filter(el => el && el.querySelectorAll);
+  const roots = panes.length ? panes : [document];
+  app._flushing = true;
+  app._flushDirty = false;
+  app._flushPanels = null;
+  try {
+    for (const scope of roots) {
+      scope.querySelectorAll('[data-kind]').forEach((el) => {
+        flushOneField(el);
+      });
+    }
+  } finally {
+    app._flushing = false;
+  }
+  const panels = app._flushPanels;
+  const dirty = app._flushDirty;
+  app._flushPanels = null;
+  app._flushDirty = false;
+  // 写回过程中被挡下来的重建：放在写回结束之后统一做一次（不会再被写回打断）
+  if (panels && panels.size) refresh([...panels]);
+  // 写回确实改动了模型（最后一次编辑还没进模型）→ 补排一次保存。
+  // 落盘内部（_saving）不需要补排：这次落盘序列化的就是写回之后的模型。
+  if (dirty) markDirty(false);
+}
+
+/** 把单个控件的内容按需写回模型 */
+function flushOneField(el) {
+  if (!el || !el.getAttribute) return;
+  if (el.disabled) return;   // 禁用控件用户改不了，写回没有意义（还会把「占位显示值」当成用户选择）
+  if (typeof inInfoKeyField === 'function' && inInfoKeyField(el)) return;   // 名称 / 版本按「改完再落盘」的规则走
+  const kind = el.getAttribute('data-kind');
+  const h = app.fieldHandlers[kind];
+  if (!h) return;
+  const field = el.getAttribute('data-field') || '';
+  const id = el.getAttribute('data-id') || '';
+  const idx = el.getAttribute('data-idx') || '';
+  if (kind === 'info') return;                                              // 信息页各字段都是即时入模型的
+  if (kind === 'pre' && FLUSH_SKIP_FIELDS.has(field)) return;
+  if (kind !== 'pre' && FLUSH_SKIP_FIELDS.has(field)) {
+    // 条件输入框（condtext / moretext / morenewtext 的 text）：写回模型后顺手就地刷新释义
+    if ((kind === 'condtext' || kind === 'moretext' || kind === 'morenewtext') && fieldDiffers(kind, id, field, idx, el)) {
+      writeCondText(kind, id, idx, el.value);
+      if (typeof updateCondExplanation === 'function') {
+        updateCondExplanation({ kind: kind === 'moretext' ? 'more' : (kind === 'morenewtext' ? 'morenew' : 'cond'), id, idx, el });
+      }
+    }
+    return;
+  }
+  if (!fieldDiffers(kind, id, field, idx, el)) return;
+  // 下拉（select）的值与模型 / 上次渲染值都不同，但这个控件从来没收到过 input / change：
+  // 这不是用户在改，而是重建面板 / 浏览器把值挪了位置（例如「尾数」下拉被挪成了别的值）。
+  // 这时把界面恢复成模型里的值，绝不写回模型 —— 否则会误报「尾数已被占用」，甚至改掉编号。
+  const tag = String(el.tagName || '').toUpperCase();
+  if (tag === 'SELECT' && !hasUserEditSince(el)) {
+    const want = modelFieldValue(kind, id, field, idx, el.getAttribute('data-sub') || '');
+    const txt = (want === undefined || want === null) ? '' : String(want);
+    if (el.value !== txt) {
+      try { el.value = txt; } catch (e) { /* 某些类型不支持 */ }
+    }
+    return;
+  }
+  h({ kind, actionId: id, field, idx, sub: el.getAttribute('data-sub') || '', value: domFieldValue(el), el }, false);
+  // 这次变化已经处理过了（写进模型，或因为冲突被拒绝、界面上也回退/修正过）：
+  // 把基线与当前显示值对齐，免得同一个值在下一次写回时被当成「用户又改了一次」而重复提示
+  // （典型的重复提示：改尾数撞车时，「尾数 N 已被占用」会弹两遍）。
+  if (el.setAttribute) {
+    try { el.setAttribute(RENDERED_ATTR, String(domFieldValue(el))); } catch (e) { /* 忽略 */ }
+  }
+  restampEditBaseline(el);
+}
+
 /** 重建面板前：把正在编辑、但还没写进模型的内容先存下来，避免输入被重建后的 DOM 覆盖掉 */
 function flushPendingEdits() {
-  const el = document.activeElement;
+  flushDomToModel();
+  const el = typeof document !== 'undefined' ? document.activeElement : null;
   if (!el || !el.getAttribute) return;
   if (typeof flushCondTextarea === 'function') flushCondTextarea(el);
 }
 
 function rerenderCurrent(keepFocus) {
-  flushPendingEdits();
+  // 先记下焦点与滚动位置，再写回：写回本身（以及它可能触发的延迟重建）会把旧 DOM 换掉，
+  // 事后再取就只能取到「已经归零」的位置（角色列表看起来就“弹回了顶部”）。
   const snap = keepFocus ? captureFocus() : null;
   const scroll = captureScroll();
+  flushPendingEdits();
   const p = app.panels[state.ui.tab];
   if (p && p.render) p.render();
+  stampRenderedPanels();
   restoreScroll(scroll);
   renderChrome();
   renderSide();
   if (snap) restoreFocus(snap);
+}
+
+/** 重建面板之后，把刚渲染出来的控件都打上「上次渲染值」基线（见 RENDERED_ATTR） */
+function stampRenderedPanels() {
+  if (typeof document === 'undefined') return;
+  stampRenderedValues(document.getElementById('paneInfo'));
+  stampRenderedValues(document.getElementById('paneActions'));
+  stampRenderedValues(document.getElementById('panePreview'));
 }
 
 /** 记住可滚动容器（如角色列表）的滚动位置，重建 DOM 后原样恢复，避免列表跳到最顶 */
@@ -296,8 +605,9 @@ function updateCardIssues() {
   document.querySelectorAll('[data-cardsummary]').forEach(el => {
     const a = state.strategy.actions.find(x => x.id === el.getAttribute('data-cardsummary'));
     if (!a) return;
-    const cond = (a.conditionText || '').trim();
-    el.textContent = cond || '（无条件=恒真）';
+    // 卡片标题旁显示的是这条动作的**动作指令串**（触发条件表达式在「触发条件」区块标题旁）
+    const cmd = String(a.action || '').trim();
+    el.textContent = cmd || '（空指令）';
   });
   // 「编号（自动）」下面的引用注释也可能因为别处的条件改动而变化，跟着一起刷新
   document.querySelectorAll('[data-refnote]').forEach(el => {
@@ -458,10 +768,10 @@ function bindEvents() {
   });
 
   // 关页 / 跳转时兜底落盘：这不是「光标离开输入框」的判定（组字过程中不会触发），
-  // 只是避免「输完名称就直接关掉页面」时那一次名称 / 版本改动丢掉。
+  // 只是避免「输完就关掉页面」时那一次改动丢掉 —— 包括还没到 600ms 定时器的编辑，
+  // 以及最后一次编辑还停在输入法组字里、没写进模型的情况。
   if (typeof window !== 'undefined' && window.addEventListener) {
     window.addEventListener('beforeunload', () => {
-      if (!app._infoPending) return;
       clearTimeout(app._saveTimer);
       app._saveTimer = null;
       saveDraftNow();
@@ -505,6 +815,9 @@ function clickLeftInfoKeyField(target) {
 function onFieldChange(el, isInput) {
   const kind = el.getAttribute && el.getAttribute('data-kind');
   if (!kind) return;
+  // 走到这里说明是控件上真的派发了 input / change（含输入法组字结束补的那次），记一笔：
+  // flushDomToModel 靠它区分「用户在改」与「重建面板把值挪了位置」（见 hasUserEditSince）。
+  markUserEdit(el);
   const info = {
     kind,
     actionId: el.getAttribute('data-id') || '',
@@ -924,11 +1237,27 @@ function mergeSummaryHtml(r, plan, src, fname) {
 
 /* ---------------- 新建 / 草稿 ---------------- */
 
+/**
+ * 新建策略。
+ *   'blank'  —— 空白策略（只有 info，没有任何动作；导出前必须自己加动作）；
+ *   其它值   —— 「新建（含兜底动作）」：一次性建好 3 条动作（都在「当前角色」下），
+ *               顺序固定为「兜底战斗检查 → 角色红血标记 → 等待」：
+ *               ① 兜底战斗检查：类型 0，指令 check,scroll(10)，条件 t>10 && last-check>4 && (!(last-check=t) || count<1)；
+ *               ② 角色红血标记：类型 0，不写指令（只做判定 / 标记），条件 low-hp && since>4；
+ *               ③ 等待：类型 9，指令 wait(0.2)，主条件恒假 + 一条 priority=100000 的恒真其他触发条件（兜底空转）。
+ *               两条类型 0 的动作都依赖「当前角色 + 类型 0 允许只写条件不写指令」这条规则。
+ */
 function newStrategy(preset) {
   const s = { info: { name: '', author: '', version: '', description: '', config: {}, preActions: [] }, actions: [] };
   state.strategy = s;
   if (preset !== 'blank') {
-    // 预置兜底等待：主条件恒假，morePriorities 里留一条恒真、次于整个类型 9（priority=100000）
+    // ① 兜底战斗检查
+    const check = addAction('', 0, { name: '兜底战斗检查', action: 'check,scroll(10)' });
+    if (check.ok) check.action.conditionText = 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )';
+    // ② 角色红血标记（只做判定 / 标记，不写指令）
+    const mark = addAction('', 0, { name: '角色红血标记', action: '' });
+    if (mark.ok) mark.action.conditionText = 'low-hp && since > 4';
+    // ③ 兜底等待：主条件恒假，morePriorities 里留一条恒真、次于整个类型 9（priority=100000）
     const r = addAction('', 9, { name: '等待', action: 'wait(0.2)' });
     if (r.ok) {
       r.action.conditionText = 'false';

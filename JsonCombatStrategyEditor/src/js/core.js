@@ -5,6 +5,229 @@
  * 这样“次于战斗检查与标记”= 10000 正好等于“优先于开盾”，各段首尾相接不重叠。 */
 const ACTION_CODE_BASE = { 0: 0, 1: 10000, 2: 20000, 3: 30000, 4: 40000, 5: 50000, 6: 60000, 7: 70000, 8: 80000, 9: 90000 };
 const MAX_SLOT = 9;
+/**
+ * 动作类型 0（战斗检查与标记）只能用于「当前角色」，编号是「退化的 1 位尾数」：正常只会有 1~9。
+ * 万一 9 个槽位都满了（例如「新建（含兜底动作）」以及后续手工添加），再往后分配会落到 index=10；
+ * parseIndex 把 10~9999 判成「位数不足」并报错，所以这里单独给类型 0 留一个额外槽位：
+ * 尾数取 10 → index 退化成 2 位数字（10），语义上仍然是「类型 0 的第 10 条」，
+ * 校验面板会提示需要「按规则重排编号」。
+ */
+const MAX_SLOT_TYPE0 = 10;
+/** 某个动作类型的尾数上限（类型 0 多留一个槽位，见 MAX_SLOT_TYPE0） */
+function maxSlotOfType(type) { return Number(type) === 0 ? MAX_SLOT_TYPE0 : MAX_SLOT; }
+/** 某个动作类型最多能有几条动作 */
+function capacityOfType(type) { return Number(type) === 0 ? MAX_SLOT_TYPE0 : MAX_SLOT; }
+
+/* ---------------- 命座要求（consRequirement） ----------------
+ * BetterGI 的动作节点里没有任何能保存「这条动作要求角色几命」的字段，
+ * 而 Newtonsoft.Json 默认忽略未知属性（MissingMemberHandling.Ignore），
+ * 于是本编辑器把命座要求写进自定义字段 consRequirement，约定：
+ *   0      —— 无命座要求（导出时省略该字段；导入时缺省也按 0 处理）；
+ *   1~6    —— 「达到命座开启」：达到 x 命时这条动作改为执行（正数 = 模式是“开启”）；
+ *   -1~-6  —— 「达到命座关闭」：达到 x 命时这条动作改为不执行（负数 = 模式是“关闭”）。
+ *
+ * 界面上编辑的是「模式（达到命座开启 / 达到命座关闭）+ 目标命座数 + 按达到x命设置动作启用/停用」：
+ *   · consMode   —— 'none' | 'open' | 'close'
+ *   · consTarget —— 目标命座数 1~6（'none' 时是 0）
+ *   · consEnabled—— 勾了「按达到x命设置动作启用/停用」之后，这条动作在**目标命座之上**是否启用
+ *                   （true = 启用、false = 停用，也就是 expression 里那个布尔值）
+ *
+ * 三个信息分别落在两个地方，合起来是**一一对应**的，可以逐字还原：
+ *   · consRequirement 的**符号** —— 「模式」（正 = 达到命座开启、负 = 达到命座关闭）、
+ *     绝对值 —— 目标命座数；
+ *   · expression 里那一段布尔字面量（wantConsValue → consExprText）—— 「启用 / 停用」；
+ *   · 勾选状态 = （模式是「开启」）=== 那个布尔值（见 consEnabledFromExpr）。
+ * 例：「达到命座关闭 + 3 命 + 勾选」= 3 命及以上停用 → consRequirement = -3、expression 片段是 false、
+ * 勾选状态 true；「达到命座关闭 + 3 命 + 不勾选」= 3 命及以上仍然启用 → 也是 -3，但 expression 片段是 true、
+ * 勾选状态 false。两种写法语义不同却共用同一个数值，靠 expression 里的布尔值区分。
+ */
+const CONS_MODES = ['none', 'open', 'close'];
+const CONS_MAX = 6;
+
+/** 这条动作是否设置了命座要求（模式不是「无命座要求」且目标命座数有效） */
+function consHasRequirement(act) {
+  return !!act && CONS_MODES.includes(act.consMode) && act.consMode !== 'none' && Number(act.consTarget) > 0;
+}
+/** 命座要求那一段的布尔值（true = 达到目标命座时这条动作被启用）；没有命座要求时返回 null */
+function wantConsValue(act) {
+  if (!consHasRequirement(act)) return null;
+  // 「达到命座开启」+ 勾选 → true（x 命及以上执行）；
+  // 「达到命座关闭」+ 勾选 → false（x 命及以上不执行）；不勾选时各自相反。
+  const on = (act.consMode === 'open') === !!act.consEnabled;
+  if (typeof CONSWANT_DEBUG !== 'undefined' && CONSWANT_DEBUG) console.log('[wantConsValue]', act.name, act.consMode, act.consTarget, act.consEnabled, '->', on);
+  return on;
+}
+/** 「命座要求」那一段的表达式文本（true / false）；没有命座要求时返回 '' */
+function consExprText(act) {
+  const v = wantConsValue(act);
+  return v === null ? '' : (v ? 'true' : 'false');
+}
+/** 写进 consRequirement 字段的数值（0 = 无需写这个字段）
+ *  符号 = 模式（正数 = 达到命座开启、负数 = 达到命座关闭），绝对值 = 目标命座数；
+ *  「启用 / 停用」由 expression 里那个布尔字面量表达（见 wantConsValue → consExprText）。 */
+function consRequirementOf(act) {
+  if (!consHasRequirement(act)) return 0;
+  const x = Number(act.consTarget);
+  return act.consMode === 'close' ? -x : x;
+}
+/**
+ * 由 consRequirement 数值 + expression 里的布尔值还原「模式 + 目标命座数 + 启用/停用」三元组。
+ * exprValue 是 expression 里那一段布尔字面量（true / false；没有那一段时按 true 处理）。
+ */
+function consEnabledFromExpr(mode, exprValue) {
+  return (mode === 'open') === (exprValue === undefined || exprValue === null ? true : !!exprValue);
+}
+/** 由 consRequirement 数值还原「模式 + 目标命座数」；没有可用数值时清空命座要求 */
+function applyConsRequirement(act, value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n === 0 || Math.abs(n) > CONS_MAX) {
+    act.consMode = 'none';
+    act.consTarget = 0;
+    act.consEnabled = false;
+    act.consRequirement = 0;
+    return;
+  }
+  act.consTarget = Math.abs(n);
+  act.consMode = n > 0 ? 'open' : 'close';
+  // 「启用 / 停用」要靠 expression 里的布尔值还原（导入 / 读草稿时由调用方再写一次）。
+  // 这里先给一个「不改变表达式」的缺省值：这样单独改模式 / 命座数时表达式不会被悄悄翻面。
+  act.consEnabled = consEnabledFromExpr(act.consMode, true);
+  act.consRequirement = consRequirementOf(act);
+}
+/** 设置这条动作在目标命座之上是启用（true）还是停用（false） */
+function setConsEnabled(act, want) { act.consEnabled = !!want; }
+/** 命座要求的中文说明（模式 + 目标命座数 + 启用/停用） */
+function consDescribe(act) {
+  if (!consHasRequirement(act)) return '无命座要求';
+  const x = Number(act.consTarget);
+  const on = wantConsValue(act);
+  return `达到 ${x} 命${act.consMode === 'close' ? '关闭' : '开启'}：${x} 命及以上${on ? '启用' : '停用'}，${x - 1} 命及以下${on ? '停用' : '启用'}`;
+}
+
+/* ---- 高命座手法的勾选联动 ----
+ * 「按达到x命设置动作启用/停用」的勾选状态遵循「有高命必有低命，没有低命必没有高命」：
+ *   勾选某个目标命座 x → 目标命座不高于 x 的同类一起勾上；
+ *   取消勾选某个目标命座 x → 目标命座不低于 x 的同类一起取消。
+ *
+ * 例：A、B 选「达到命座开启」，C、D 选「达到命座关闭」；A、C 是三命，B 是一命，D 是六命。
+ * 勾选 A（三命）→ B（一命，≤3）与 C（三命，≤3）一起勾上，D（六命，>3）不动；
+ * 取消勾选 A → C（三命，≥3）一起取消，B（一命，<3）不动。
+ * 于是「已勾选的目标命座集合」恒为向下闭合的 {1..k}，
+ * 它正好等价于「这个角色当前按几命来设置动作开关」。
+ */
+
+/** 这条动作「按达到x命设置动作启用/停用」当前是否勾选 */
+function consActiveState(act) {
+  return consHasRequirement(act) && !!act.consEnabled;
+}
+
+/**
+ * 用户勾选 / 取消勾选某条动作的「按达到x命设置动作启用/停用」之后，按联动规则同步同一角色的其他动作。
+ * 返回被改动过的动作数组（含传入的那条）。
+ */
+function syncConsEnabled(act, checked) {
+  if (!consHasRequirement(act)) return [];
+  const x = Number(act.consTarget);
+  const changed = [];
+  if (!!act.consEnabled !== !!checked) { act.consEnabled = !!checked; changed.push(act); }
+  for (const o of state.strategy.actions) {
+    if (o.id === act.id) continue;
+    if (String(o.character || '') !== String(act.character || '')) continue;
+    if (!consHasRequirement(o)) continue;
+    const y = Number(o.consTarget);
+    // 勾选：目标命座不高于 x 的一起勾上；取消勾选：目标命座不低于 x 的一起取消。
+    // 注意这里只能用 true / false 判断，不要把 null 当「不处理」的哨兵：
+    // `false === null` 是 false，会把「要取消勾选」误判成「照常处理」。
+    if (checked) {
+      if (o.consEnabled) continue;
+      if (y > x) continue;
+      o.consEnabled = true;
+    } else {
+      if (!o.consEnabled) continue;
+      if (y < x) continue;
+      o.consEnabled = false;
+    }
+    changed.push(o);
+  }
+  return changed;
+}
+
+/** 某个角色「有命座要求的动作」用到的全部目标命座数（升序去重） */
+function consTargetsFor(actions, character) {
+  const set = new Set();
+  for (const a of (actions || [])) {
+    if (String(a.character || '') !== String(character || '')) continue;
+    if (!consHasRequirement(a)) continue;
+    set.add(Number(a.consTarget));
+  }
+  return [...set].sort((p, q) => p - q);
+}
+
+/**
+ * 把某角色「要达到几命」设置成 k（0 = 不启用任何高命手法）：
+ * 目标命座不高于 k 的动作启用（勾选），高于 k 的停用（取消勾选）。
+ */
+function applyConsLevel(actions, character, k) {
+  const level = Number(k) || 0;
+  const changed = [];
+  for (const a of (actions || [])) {
+    if (String(a.character || '') !== String(character || '')) continue;
+    if (!consHasRequirement(a)) continue;
+    const want = Number(a.consTarget) <= level;
+    if (!!a.consEnabled === want) continue;
+    a.consEnabled = want;
+    changed.push(a);
+  }
+  return changed;
+}
+
+/**
+ * 把某角色的勾选状态规整成「向下闭合」的一致状态：
+ * 若最大的已勾选目标命座是 k，则 ≤k 的目标命座一律勾上、>k 的一律取消。
+ * 导入 / 载入草稿时用它兜住「expression 里的布尔值与 consRequirement 换算出的
+ * 勾选状态在同一个角色内互相矛盾」的情况（冲突时按「同命座有一个选了就都统一勾上，
+ * 低命座没勾选高命座也取消勾选」处理）。返回被改动过的动作数组。
+ */
+function normalizeConsChecks(actions, character) {
+  const list = (actions || []).filter(a => String(a.character || '') === String(character || '') && consHasRequirement(a));
+  if (!list.length) return [];
+  const targets = [...new Set(list.map(a => Number(a.consTarget)))].sort((p, q) => p - q);
+  let level = 0;
+  for (const t of targets) {
+    const any = list.some(a => Number(a.consTarget) === t && !!a.consEnabled);
+    if (any) level = t;
+  }
+  const changed = [];
+  for (const a of list) {
+    const want = Number(a.consTarget) <= level;
+    if (!!a.consEnabled === want) continue;
+    a.consEnabled = want;
+    changed.push(a);
+  }
+  return changed;
+}
+
+/** 对全部角色做一次勾选状态规整（导入 / 载入草稿之后调用） */
+function normalizeAllConsChecks(actions) {
+  const chars = new Set((actions || []).map(a => String(a.character || '')));
+  const changed = [];
+  for (const ch of chars) changed.push(...normalizeConsChecks(actions, ch));
+  return changed;
+}
+
+/** 需要出现在「快捷开关高命座手法」弹窗里的角色（有动作设置了命座要求的角色） */
+function consCharacters(actions) {
+  const out = [];
+  const seen = new Set();
+  for (const a of (actions || [])) {
+    if (!consHasRequirement(a)) continue;
+    const ch = String(a.character || '');
+    if (seen.has(ch)) continue;
+    seen.add(ch);
+    out.push(ch);
+  }
+  return out;
+}
 
 /* ---------------- 角色表 ---------------- */
 
@@ -38,7 +261,7 @@ function parseIndex(index) {
   // 动作类型 0（战斗检查与标记）只用于「当前角色」，编号只剩尾数 1 位：index = 1~9
   // （它的首位数字同时也是尾数，因此无法与「类型 9」区分；按规则约定 10 以下一律视为类型 0）
   if (index < 10) {
-    if (index < 1) return { ok: false, type: 0, reason: `动作类型 0 的 index 只能是 1~${MAX_SLOT}（战斗检查与标记只用于「当前角色」）` };
+    if (index < 1) return { ok: false, type: 0, reason: `动作类型 0 的 index 只能是 1~${MAX_SLOT}（战斗检查与标记只用于「当前角色」；9 个槽位都满时编辑器会临时多给一个尾数 ${MAX_SLOT_TYPE0}，此时需要「按规则重排编号」）` };
     return { ok: true, type: 0, code: 0, seq: 0, slot: index };
   }
   if (index < 10000) {
@@ -94,7 +317,20 @@ function createAction(opts = {}) {
     // tags：专用于保存用户对该动作节点的注释。BetterGI 的动作节点里没有这个属性，
     // 但 Newtonsoft.Json 默认忽略未知属性（MissingMemberHandling.Ignore），所以可以安全地用它存注释。
     tags: opts.tags ?? '',
+    // 命座要求（consRequirement）：见文件上方 consRequirement 的说明。
+    // 界面上编辑的是「模式 + 目标命座数 + 启用/停用」三元组，consRequirement 由它换算出来。
+    consMode: opts.consMode ?? 'none',
+    consTarget: Number.isInteger(opts.consTarget) ? opts.consTarget : 0,
+    consEnabled: !!opts.consEnabled,
+    consRequirement: 0,
   };
+  // 调用方可以直接给 consRequirement 数值，也可以给「模式 + 目标命座数 + 勾选」三元组；
+  // 给了数值就以数值为准（导入时走这条路），否则由三元组换算。
+  if (Number.isInteger(opts.consRequirement) && opts.consRequirement !== 0) {
+    applyConsRequirement(a, opts.consRequirement);
+  } else {
+    a.consRequirement = consRequirementOf(a);
+  }
   return a;
 }
 
@@ -187,7 +423,7 @@ function slotTaken(actions, character, type, slot, exceptId) {
   return actions.some(a => (a.character || '') === (character || '') && a.type === type && a.slot === slot && a.id !== exceptId);
 }
 function nextFreeSlot(actions, character, type, exceptId) {
-  for (let s = 1; s <= MAX_SLOT; s++) if (!slotTaken(actions, character, type, s, exceptId)) return s;
+  for (let s = 1; s <= maxSlotOfType(type); s++) if (!slotTaken(actions, character, type, s, exceptId)) return s;
   return 0;
 }
 function countOfType(actions, character, type) {
@@ -217,14 +453,14 @@ function allocateSlot(actions, character, type, exceptId) {
 function addAction(character, type, opts = {}) {
   const actions = state.strategy.actions;
   if (type === 0 && character) return { ok: false, error: '动作类型 0（战斗检查与标记）只能添加到「当前角色」下' };
-  if (countOfType(actions, character, type) >= MAX_SLOT) {
+  if (countOfType(actions, character, type) >= capacityOfType(type)) {
     return {
       ok: false,
-      error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作已达上限 ${MAX_SLOT} 条，无法继续新增。请删除该类型下的某条动作，或把某条动作改成别的动作类型。`
+      error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作已达上限 ${capacityOfType(type)} 条，无法继续新增。请删除该类型下的某条动作，或把某条动作改成别的动作类型。`
     };
   }
   const slot = allocateSlot(actions, character, type);
-  if (!slot) return { ok: false, error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作序号 1~${MAX_SLOT} 已全部被占用` };
+  if (!slot) return { ok: false, error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作序号 1~${capacityOfType(type)} 已全部被占用` };
   const act = createAction({ ...opts, type, character });
   act.slot = slot;
   recomputeIndexes([act]);
@@ -248,14 +484,14 @@ function changeActionType(id, newType) {
   if (newType === 0 && act.character) {
     return { ok: false, error: '动作类型 0（战斗检查与标记）只能用于「当前角色」。请先把该动作的角色改为「当前角色」。' };
   }
-  if (countOfType(actions, act.character, newType) >= MAX_SLOT) {
+  if (countOfType(actions, act.character, newType) >= capacityOfType(newType)) {
     return {
       ok: false,
-      error: `「${act.character || '当前角色'}」的「${actionTypeName(newType)}」动作已达上限 ${MAX_SLOT} 条，无法转入。请先删除该类型下的某条动作，或改用其他动作类型。`
+      error: `「${act.character || '当前角色'}」的「${actionTypeName(newType)}」动作已达上限 ${capacityOfType(newType)} 条，无法转入。请先删除该类型下的某条动作，或改用其他动作类型。`
     };
   }
   const slot = allocateSlot(actions, act.character, newType);
-  if (!slot) return { ok: false, error: `「${actionTypeName(newType)}」的序号 1~${MAX_SLOT} 已全部被占用，无法转入` };
+  if (!slot) return { ok: false, error: `「${actionTypeName(newType)}」的序号 1~${capacityOfType(newType)} 已全部被占用，无法转入` };
   act.type = newType;
   act.slot = slot;
   act.manualIndex = false;
@@ -554,8 +790,12 @@ function findUnpairedKeydowns(parts) {
   return order.filter(k => held.has(k)).map(k => ({ key: k, raw: held.get(k), released: released.has(k) }));
 }
 
-/** 解析整条指令串 */
-function parseActionString(str) {
+/** 解析整条指令串。
+ *  opts: { skipEmptyWarning: true } = 不报「指令串为空」的警告。
+ *  校验器用它来处理「当前角色 + 动作类型 0（战斗检查与标记）」这一种情况：
+ *  那种动作可以只写触发条件、不写任何指令（指令串与触发条件**同时**为空才提示）。 */
+function parseActionString(str, opts) {
+  const o = opts || {};
   const tokens = splitCommandString(str || '');
   const parts = tokens.map(t => parseCommand(t));
   const errors = [];
@@ -568,8 +808,20 @@ function parseActionString(str) {
   for (const u of findUnpairedKeydowns(parts)) {
     warnings.push(`指令「${u.raw}」按下了按键「${u.key}」，但整条指令串里没有对同一个按键的 keyup（${u.released ? '它只在松开别的按键时被顺带松开过' : '这条指令串里根本没出现松开它的指令'}）：这个按键可能会被一直按住，导致后续按键/普攻等操作失灵。请补一条 keyup(${u.key})，或改用「长按后松开按键」这类成对的写法`);
   }
-  if (parts.length === 0) warnings.push('指令串为空：该动作执行时不会有任何操作');
+  if (parts.length === 0 && !o.skipEmptyWarning) warnings.push('指令串为空：该动作执行时不会有任何操作');
   return { parts, errors, warnings };
+}
+
+/**
+ * 「当前角色 + 动作类型 0（战斗检查与标记）」的空指令特例。
+ * 这类动作常被用来“只做一次判定/标记”（条件成立就按优先级顺序往下走），
+ * 可以只写触发条件、不写任何指令，所以这时不提示「指令串为空」；
+ * 只有指令串与触发条件**同时**为空（既没内容也没条件，纯占位）才提示。
+ */
+function isMarkerOnlyAction(a) {
+  if (!a || a.type !== 0 || a.character) return false;
+  if (String(a.action || '').trim() !== '') return false;
+  return String(a.conditionText || '').trim() !== '';
 }
 
 function tokenHasRound(parts) {
@@ -793,20 +1045,33 @@ function teammateExpr(act, actions) {
   return `${inc ? includeOperand(inc) : '(true)'} && ${excPart} && (true) && (${autoRaw})`;
 }
 
-/** 组装最终 condition.expression */
+/** 组装最终 condition.expression
+ *  无命座要求： 触发条件 或 (触发条件) && (队友条件)（原来的写法，一个字都不改）；
+ *  有命座要求： ((触发条件) && (命座要求)) && (队友条件)，队友条件为空时是 (触发条件) && (命座要求)。
+ *  「命座要求」只是一个布尔值字面量（true / false），见 consExprText。
+ */
 function buildExpression(act, actions) {
   const own = (act.conditionText || '').trim();
   const tm = teammateExpr(act, actions);
-  if (!tm) return own;
-  return `(${own || 'true'}) && ${wrapOperand(tm)}`;
+  const cons = consExprText(act);
+  if (!cons) return tm ? `(${own || 'true'}) && ${wrapOperand(tm)}` : own;
+  const base = `(${own || 'true'}) && (${cons})`;
+  return tm ? `(${base}) && ${wrapOperand(tm)}` : base;
 }
 
-/** morePriorities 最终条目 */
+/** morePriorities 最终条目（与 buildExpression 同一套组装规则，「触发条件」换成该条目自己的条件） */
 function buildMorePriorities(act, actions) {
   const tm = teammateExpr(act, actions);
+  const cons = consExprText(act);
   return (act.morePriorities || []).map(mp => {
     const own = (mp.text || '').trim();
-    const expression = tm ? `(${own || 'true'}) && ${wrapOperand(tm)}` : own;
+    // 没有命座要求时保持原状：没有队友条件就写这条条目自己的条件（空 = 空，恒真）
+    if (!cons) {
+      const expression = tm ? `(${own || 'true'}) && ${wrapOperand(tm)}` : own;
+      return { expression, priority: mp.priority, cmp: mp.cmp, scope: mp.scope, text: own };
+    }
+    const base = `(${own || 'true'}) && (${cons})`;
+    const expression = tm ? `(${base}) && ${wrapOperand(tm)}` : base;
     return { expression, priority: mp.priority, cmp: mp.cmp, scope: mp.scope, text: own };
   });
 }
@@ -1036,13 +1301,54 @@ function excludeChainFromNegation(innerText, wholeGroup) {
 }
 
 /**
+ * 「命座要求」在 expression 末尾的形态：`… && (true)` / `… && (false)`。
+ * 返回 { text: 剥掉之后剩下的算式, value: true|false|null }。
+ *
+ * 只在**不可能有队友条件**的调用点使用（有队友条件时命座要求排在队友条件前面，
+ * 由 splitTriggerAndTeammate 从顶层 && 链上取）。
+ * 这里带一个「整体已经被一层括号包住」的保护：
+ *   · 本编辑器导出的「有命座要求 + 有队友条件」形如 `((触发条件) && (命座要求)) && (队友条件)`，
+ *     整条不是 fullyWrapped，末尾的 `&& (…队友条件…)` 也不是布尔字面量，所以不会被误剥；
+ *   · 用户自己写的 `(true) && (in-party(甲))` 同样不是 fullyWrapped，也不会被误剥；
+ *   · 只有 `((触发条件) && (命座要求))`（有命座要求、没有队友条件的那一种）是 fullyWrapped，
+ *     这时才按末尾的布尔字面量剥出命座要求。
+ */
+function splitTrailingCons(text) {
+  const t = String(text === null || text === undefined ? '' : text);
+  // 整体被一对外层括号完整包住时（手写 / 旧数据的 `((触发条件) && (命座要求))`），先在里层找一次
+  const inner = fullyWrapped(t) ? t.trim().slice(1, -1) : t;
+  const m = inner.match(/^(.*?)\s*&&\s*\(\s*(true|false)\s*\)\s*$/);
+  if (!m || !m[1].trim()) return { text: t, value: null, wrapped: false };
+  // 剥掉命座要求之后剩下的那段触发条件：本编辑器导出时会把它整体包一层括号
+  // （`(触发条件) && (命座要求)`），这里要把这层括号去掉，否则每往返一次就多一层括号。
+  // 剩下的如果正好是恒真占位 `true`，按「空条件」还原（空 = 恒真，与输入框留空等价）。
+  let body = unwrapWholeText(m[1]);
+  if (body === 'true') body = '';
+  return { text: body, value: m[2] === 'true', wrapped: true };
+}
+
+/** 去掉「完整包住整段」的括号（一层层剥：`((a) && (b))` → `(a) && (b)`、`(a || b)` → `a || b`） */
+function unwrapWholeText(text) {
+  let t = String(text === null || text === undefined ? '' : text).trim();
+  while (fullyWrapped(t)) t = t.slice(1, -1).trim();
+  return t;
+}
+
+/**
  * 把一条 expression 拆成 { trigger, teammate }
  * teammate 为 null 表示没有队友条件；teammate.ok=false 表示看起来有队友条件但拆不出来（此时 trigger 保留原文）
+ *
+ * 命座要求（consRequirement）那一段是组装时在最外层补的 `&& (true/false)`：
+ *   · 有队友条件时，它在队友条件**里面**（`((触发条件) && (命座要求)) && (队友条件)`），
+ *     按原来的规则拆完队友条件之后，末尾剩下的那个布尔字面量就是它；
+ *   · 没有队友条件时它在末尾（`(触发条件) && (命座要求)`），用 splitTrailingCons 剥掉。
+ * 只在「确实剥掉了队友条件」或「末尾确实跟着 `&& (布尔字面量)`」时才认它，
+ * 免得把 `(true) && (队友条件)` 里的恒真占位误认成命座要求。
  */
 function splitTriggerAndTeammate(text, actionNames) {
   const raw = String(text === null || text === undefined ? '' : text);
   const parsed = condParse(raw, actionNames || []);
-  if (parsed.error || !parsed.ast) return { trigger: raw, teammate: null };
+  if (parsed.error || !parsed.ast) return { trigger: raw, teammate: null, cons: null };
   const ops = flattenAndOperands(parsed.ast);
   // 定位「队友条件」段的起点：
   //   · 从第一个含 in-party 的操作数开始，再把前面紧邻的恒真占位一起收进来
@@ -1052,18 +1358,31 @@ function splitTriggerAndTeammate(text, actionNames) {
   const atInParty = ops.findIndex(condContainsInParty);
   const atEmptyExclude = ops.findIndex((n) => !condBoolPlaceholder(n, true) && isTeammateLeadingPlaceholder(n));
   const at = atInParty >= 0 ? (atEmptyExclude >= 0 ? Math.min(atInParty, atEmptyExclude) : atInParty) : atEmptyExclude;
-  if (at < 0) return { trigger: raw, teammate: null };
+  if (at < 0) {
+    // 没有队友条件：末尾可能跟着「命座要求」那一段（`(触发条件) && (命座要求)`，
+    // 手写 / 旧数据里也可能是整体再包一层的 `((触发条件) && (命座要求))`）。
+    // 两种情况都由 splitTrailingCons 处理：它会剥掉命座要求，并把触发条件那层括号去掉。
+    const stripped = splitTrailingCons(raw);
+    if (stripped.value === null || stripped.text === raw) return { trigger: raw, teammate: null, cons: null };
+    return { trigger: stripped.text, teammate: null, cons: stripped.value };
+  }
   let tmStart = at;
   while (tmStart > 0 && isTeammateLeadingPlaceholder(ops[tmStart - 1])) tmStart--;
   const head = ops.slice(0, tmStart);
-  // 触发条件末尾的 true 占位（来自「(true) && (队友条件)」）不算内容
+  // 触发条件末尾的 true 占位（来自「(true) && (队友条件)」）与「命座要求」那一段都排在队友条件前面，
+  // 这里从后往前收：先认出末尾的布尔字面量当命座要求，再把紧邻的 true 占位去掉。
+  let cons = null;
+  if (head.length && head[head.length - 1].type === 'bool') {
+    cons = !!head[head.length - 1].value;
+    head.pop();
+  }
   while (head.length && head[head.length - 1].type === 'bool' && head[head.length - 1].value === true) head.pop();
   // 用 && 重新连接时要给 || 片段整体加括号，否则会改变运算顺序（只有一个操作数时不用加）
   const asAnd = (list) => list.map(n => (list.length > 1 && n.type === 'binary' && (n.op === '&&' || n.op === '||') ? `(${condToText(n)})` : condToText(n))).join(' && ');
   const trigger = head.length ? asAnd(head) : '';
   const r = decomposeTeammate(ops.slice(at));
-  if (!r.ok) return { trigger: raw, teammate: r };   // 拆不出来就整条按触发条件处理
-  return { trigger, teammate: r, teammateText: asAnd(ops.slice(tmStart)) };
+  if (!r.ok) return { trigger: raw, teammate: r, cons: null };   // 拆不出来就整条按触发条件处理
+  return { trigger, teammate: r, teammateText: asAnd(ops.slice(tmStart)), cons };
 }
 
 /** 运算符数组补齐到指定长度 */
@@ -1177,7 +1496,9 @@ function validateStrategy() {
     else indexSeen.set(a.index, a.name || '(未命名)');
 
     // 指令
-    const parsed = parseActionString(a.action);
+    // 「当前角色 + 动作类型 0」只写了触发条件、没写指令时不提示「指令串为空」：
+    // 这种“只做判定/标记”的动作是正常用法，两处同时为空才提示（见 isMarkerOnlyAction）。
+    const parsed = parseActionString(a.action, { skipEmptyWarning: isMarkerOnlyAction(a) });
     for (const e of parsed.errors) push(errors, `${where}：${e}`, a.id);
     for (const w of parsed.warnings) push(warnings, `${where}：${w}`, a.id);
     const fs = firstSwitchInfo(parsed.parts);
@@ -1196,6 +1517,17 @@ function validateStrategy() {
 
     // 注释（tags）：本编辑器约定的注释字段，BetterGI 会忽略它；空注释在导出时省略该字段
     if (a.tags !== undefined && a.tags !== null && typeof a.tags !== 'string') push(errors, `${where}：注释必须是字符串（写入 tags 字段）`, a.id);
+
+    // 命座要求（consRequirement）：本编辑器约定的字段，BetterGI 会忽略它；
+    // 没有命座要求（0）时导出会省略该字段。
+    if (!CONS_MODES.includes(a.consMode)) {
+      push(errors, `${where}：命座要求的模式无法识别（${a.consMode}）`, a.id);
+    } else if (a.consMode === 'none') {
+      const need = Number(a.consTarget) > 0;
+      if (need) push(errors, `${where}：命座要求的状态不一致（模式为「无命座要求」却带着目标命座数），请重新选择「命座要求」`, a.id);
+    } else if (!(Number.isInteger(Number(a.consTarget)) && Number(a.consTarget) >= 1 && Number(a.consTarget) <= CONS_MAX)) {
+      push(errors, `${where}：命座要求的目标命座数必须是 1~${CONS_MAX} 的整数`, a.id);
+    }
 
     // 条件
     const cv = condValidate(a.conditionText, { actionNames: names, knownIndexes: idxSet, currentAction: a });
@@ -1243,9 +1575,10 @@ function validateStrategy() {
     groups.set(k, (groups.get(k) || 0) + 1);
   }
   for (const [k, c] of groups) {
-    if (c > MAX_SLOT) {
-      const [ch, t] = k.split('|');
-      push(errors, `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${MAX_SLOT} 条`, null);
+    const [ch, t] = k.split('|');
+    const cap = capacityOfType(Number(t));
+    if (c > cap) {
+      push(errors, `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${cap} 条`, null);
     }
   }
 
@@ -1289,8 +1622,8 @@ function planRenumber() {
     const [character, typeStr] = key.split('|');
     const type = Number(typeStr);
     list.sort((x, y) => (x.a.index - y.a.index) || (x.i - y.i));
-    if (list.length > MAX_SLOT) {
-      return { error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作有 ${list.length} 条，超过上限 ${MAX_SLOT} 条，无法自动编号。请先删除或改类型。` };
+    if (list.length > capacityOfType(type)) {
+      return { error: `「${character || '当前角色'}」的「${actionTypeName(type)}」动作有 ${list.length} 条，超过上限 ${capacityOfType(type)} 条，无法自动编号。请先删除或改类型。` };
     }
     const av = character ? getAvatar(character) : { code: 0, seq: 0 };
     if (character && !av) return { error: `角色「${character}」不在角色表中，无法自动编号。` };
@@ -1405,6 +1738,9 @@ function buildJson() {
       index: a.index,
     };
     if (tags.trim()) o.tags = tags;
+    // 命座要求：0（无命座要求）时不写这个字段（写进去没有任何作用）
+    const consReq = consRequirementOf(a);
+    if (consReq) o.consRequirement = consReq;
     if (mps.length) o.morePriorities = mps.map(m => ({ expression: m.expression, priority: m.priority }));
     return o;
   });
@@ -1470,7 +1806,7 @@ function inferActionType(actionStr, name, ensureCast) {
 
 /** 动作节点里本编辑器认得的字段（比较时忽略大小写，因为 BetterGI 用的 Newtonsoft.Json 大小写不敏感）。
  *  其余字段一律忽略，但会在导入弹窗里提醒（见 unknownFields）。 */
-const KNOWN_ACTION_KEYS = new Set(['name', 'character', 'action', 'condition', 'index', 'ensurecast', 'morepriorities', 'tags']);
+const KNOWN_ACTION_KEYS = new Set(['name', 'character', 'action', 'condition', 'index', 'ensurecast', 'morepriorities', 'tags', 'consrequirement']);
 
 function analyzeImport(obj) {
   const problems = [];
@@ -1497,6 +1833,13 @@ function analyzeImport(obj) {
     // 比较时忽略大小写：BetterGI 用的 Newtonsoft.Json 大小写不敏感，写 Tags / TAGS 也能被识别。
     const tagKey = Object.keys(raw).find(k => String(k).toLowerCase() === 'tags');
     a.tags = tagKey !== undefined && typeof raw[tagKey] === 'string' ? raw[tagKey] : '';
+    // consRequirement：本编辑器约定用来保存「命座要求」（见文件上方说明）。
+    // 同样忽略大小写；值必须是 -6~-1 / 1~6 的整数，0 或缺失 = 无命座要求，
+    // 其它取值按 0 处理（BetterGI 本来就忽略这个字段，导入时不该因为写错值而报错）。
+    const consKey = Object.keys(raw).find(k => String(k).toLowerCase() === 'consrequirement');
+    const consRaw = consKey === undefined ? undefined : raw[consKey];
+    a.consRequirement = (Number.isInteger(consRaw) && consRaw !== 0 && Math.abs(consRaw) <= CONS_MAX) ? consRaw : 0;
+    applyConsRequirement(a, a.consRequirement);
     // 多余字段（例如正式版 BGI 里不存在的 redArrowAim）：BetterGI 会静默忽略，本编辑器也忽略，
     // 但要在导入弹窗里列出来提醒用户（否则用户会以为这些内容被保存了）。
     for (const k of Object.keys(raw)) {
@@ -1662,6 +2005,43 @@ function analyzeImport(obj) {
         if (e.loc === 'cond') a.conditionText = e.trigger;
         else if (a.morePriorities[e.idx]) a.morePriorities[e.idx].text = e.trigger;
       }
+      // 没有队友条件的那几条也要把「命座要求」剥掉（否则 expression 会整条变成触发条件）
+      for (const e of a.__split) {
+        if (e.teammate) continue;
+        if (e.loc === 'cond') a.conditionText = e.trigger;
+        else if (a.morePriorities[e.idx]) a.morePriorities[e.idx].text = e.trigger;
+      }
+      // ---- 命座要求（consRequirement） ----
+      // 布尔值来自各条 expression 末尾/中间的命座要求段；一条都没认出来时按 true 处理
+      // （没有那一句 `&& (false)` 就说明这条动作在对应命座下是启用的）。
+      const consVals = a.__split.filter(e => e.cons !== undefined && e.cons !== null).map(e => e.cons);
+      if (consHasRequirement(a)) {
+        // 同一个动作的各条 expression 理论上应当一致；不一致时以主条件（没有则第一条）为准，
+        // 并给出提示（导出时所有 expression 都会按这个选择重写）。
+        const want = consVals.length ? consVals[0] : true;
+        if (consVals.some(v => v !== want)) {
+          problems.push({
+            kind: 'cons-mismatch',
+            actionId: a.id,
+            text: `${label}：主条件与其他触发条件的「命座要求」布尔值不一致，已按${
+              a.__split.find(e => e.cons !== undefined && e.cons !== null && e.loc === 'cond') ? '主条件' : '第一条其他触发条件'
+            }导入；导出时各条 expression 的命座要求都会写成同一个值。`,
+          });
+        }
+        // 三个信息分别来自两个地方（见文件上方的说明，合起来一一对应）：
+        //   · consRequirement 的**符号** → 模式（正 = 达到命座开启、负 = 达到命座关闭）；
+        //   · expression 里那一段布尔字面量 → 「启用 / 停用」；
+        //   · 勾选状态 = （模式是「开启」）=== 那个布尔值。
+        // 这样「达到命座开启 + 不勾选」与「达到命座关闭 + 勾选」虽然数值相同，也能各自原样还原，
+        // 不会出现「本来没勾上的，导入后变成勾上」。
+        const exprVal = consVals.length ? consVals[0] : true;
+        a.consEnabled = consEnabledFromExpr(a.consMode, exprVal);
+        a.consRequirement = consRequirementOf(a);
+      } else {
+        // 没有可用的 consRequirement 数值（0 / 缺失 / 超范围）：只按布尔值没法确定模式与命座数，
+        // 这时丢弃命座要求那一段（触发条件已经剥出来了，不会丢内容）。
+        a.consMode = 'none'; a.consTarget = 0; a.consEnabled = false; a.consRequirement = 0;
+      }
       if (bad.length) {
         const where = bad.map(e => (e.loc === 'cond' ? '主条件' : `其他触发条件 #${e.idx + 1}`)).join('、');
         problems.push({
@@ -1745,6 +2125,16 @@ function analyzeImport(obj) {
         a.teammates.autoExcludeSameType = withInc.every(covered);
       }
     }
+    // 队友那块没有出现在 expression 里的动作（一个 in-party 都没有：必要队友、排除队友、自动排除全空）：
+    // 上面那条还原规则同样适用，否则这个勾选会在往返之后从「勾上」掉成「不勾」。
+    // 这类动作的排除条件为空，所以「同类其他动作里凡设置了必要队友的都已被覆盖」等价于
+    // 「同类其他动作里根本没有设置必要队友的」。
+    for (const a of actions) {
+      if (a.__tmParse) continue;
+      const others = actions.filter(o => o.id !== a.id && (o.character || '') === (a.character || ''));
+      const withInc = others.filter(o => o.type === a.type && includeExprOf(o.teammates));
+      a.teammates.autoExcludeSameType = withInc.length === 0;
+    }
     for (const a of actions) { delete a.__split; delete a.__tmParse; }
   }
 
@@ -1816,9 +2206,10 @@ function analyzeImport(obj) {
   const cnt = new Map();
   for (const a of actions) { const k = `${a.character || ''}|${a.type}`; cnt.set(k, (cnt.get(k) || 0) + 1); }
   for (const [k, c] of cnt) {
-    if (c > MAX_SLOT) {
+    const cap = capacityOfType(Number(k.split('|')[1]));
+    if (c > cap) {
       const [ch, t] = k.split('|');
-      problems.push({ kind: 'capacity', text: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${MAX_SLOT} 条，需要删除或改类型后才能导入` });
+      problems.push({ kind: 'capacity', text: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作有 ${c} 条，超过上限 ${cap} 条，需要删除或改类型后才能导入` });
     }
   }
 
@@ -1891,6 +2282,9 @@ function applyImport(result, opts) {
   }
   state.strategy.actions = actions;
   if (o.fixPriorityTail) fixPriorityTails(result.problems);
+  // 命座要求的勾选状态在同一个角色内必须自洽（有高命必有低命）；
+  // 导入的策略里万一出现矛盾（手写 / 改过 expression），这里统一按规则规整一次。
+  normalizeAllConsChecks(actions);
   // 导入的动作默认按 index 升序排布
   state.strategy.actions.sort((x, y) => x.index - y.index);
 }
@@ -2075,6 +2469,12 @@ function mergeActionDiffs(src, cur, srcActions, curActions) {
   if (String(src.character || '') !== String(cur.character || '')) add('character', '角色', cur.character || '(当前角色)', src.character || '(当前角色)');
   if (String(src.action || '') !== String(cur.action || '')) add('action', '动作指令', cur.action || '(空)', src.action || '(空)');
   if (!!src.ensureCast !== !!cur.ensureCast) add('ensureCast', '确保E技能释放成功（ensureCast）', cur.ensureCast ? '已勾选' : '未勾选', src.ensureCast ? '已勾选' : '未勾选');
+  const cr = consRequirementOf(cur), sr = consRequirementOf(src);
+  // 命座要求的「数值 + 勾选状态」要一起比：同一个数值（例如 -2）在「勾选」与「不勾选」下语义不同
+  // （前者 2 命及以上停用、后者 2 命及以上仍然启用），只比数值会把这两种情况当成相同。
+  if (cr !== sr || consActiveState(cur) !== consActiveState(src)) {
+    add('consRequirement', '命座要求（consRequirement）', consDescribe(cur), consDescribe(src));
+  }
   const cc = mergeCanonExpr(buildExpression(cur, curActions), curActions);
   const ic = mergeCanonExpr(buildExpression(src, srcActions), srcActions);
   if (cc !== ic) add('condition', '触发条件 / 队友条件（最终 expression）', cc || '(空 = 恒真)', ic || '(空 = 恒真)');
@@ -2129,6 +2529,13 @@ function applyMergedFields(dst, src, convertExpr) {
   dst.action = src.action || '';
   dst.ensureCast = !!src.ensureCast;
   dst.tags = src.tags || '';
+  // 命座要求（consRequirement）也属于动作内容，替换 / 合并时把三元组一起带过来
+  // （数值只带「模式 + 目标命座数」，勾选状态必须从被导入动作那边一起复制，否则会翻面）。
+  dst.consMode = CONS_MODES.includes(src.consMode) ? src.consMode : 'none';
+  dst.consTarget = Number.isInteger(src.consTarget) ? src.consTarget : 0;
+  dst.consEnabled = !!src.consEnabled;
+  if (!consHasRequirement(dst)) { dst.consMode = 'none'; dst.consTarget = 0; dst.consEnabled = false; }
+  dst.consRequirement = consRequirementOf(dst);
   dst.conditionText = convertExpr(src.conditionText);
   dst.conditionMode = src.conditionMode || 'all';
   dst.conditionCacheFor = null;
@@ -2203,10 +2610,12 @@ function applyMergePlan(plan, decisions) {
       groups.set(k, (groups.get(k) || 0) + 1);
     }
     for (const [k, c] of groups) {
-      if (c <= MAX_SLOT) continue;
+      const idx0 = k.lastIndexOf('|');
+      const t0 = Number(k.slice(idx0 + 1));
+      if (c <= capacityOfType(t0)) continue;
       const idx = k.lastIndexOf('|');
       const ch = k.slice(0, idx), t = k.slice(idx + 1);
-      return { ok: false, error: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作会变成 ${c} 条，超过上限 ${MAX_SLOT} 条。用导入版本替换会改变动作的角色，请先整理该角色 / 该类型的动作后再合并。` };
+      return { ok: false, error: `「${ch || '当前角色'}」的「${actionTypeName(Number(t))}」动作会变成 ${c} 条，超过上限 ${capacityOfType(Number(t))} 条。用导入版本替换会改变动作的角色，请先整理该角色 / 该类型的动作后再合并。` };
     }
   }
 
@@ -2230,14 +2639,14 @@ function applyMergePlan(plan, decisions) {
     if (!av) return { ok: false, error: `动作「${it.src.name || '(未命名)'}」的角色「${character}」不在角色表中。` };
     let picked = null;
     for (const t of mergeTypeOrder(it.src.type)) {
-      if (work.filter(w => w.character === character && w.type === t).length < MAX_SLOT) { picked = t; break; }
+      if (work.filter(w => w.character === character && w.type === t).length < capacityOfType(t)) { picked = t; break; }
     }
     if (picked === null) {
       return { ok: false, error: `无法为被导入的动作「${it.src.name || '(未命名)'}」分配编号：「${character || '当前角色'}」的 9 种动作类型都已经各有 ${MAX_SLOT} 条动作了。请先删除或改类型后再合并。` };
     }
     const usedSlots = new Set(work.filter(w => w.character === character && w.type === picked).map(w => w.slot));
     let slot = 0;
-    for (let s = 1; s <= MAX_SLOT; s++) if (!usedSlots.has(s)) { slot = s; break; }
+    for (let s = 1; s <= capacityOfType(picked); s++) if (!usedSlots.has(s)) { slot = s; break; }
     const index = makeIndex(picked, av.code, av.seq, slot);
     const name = kinds[i] === 'rename'
       ? (String(it.src.name || '').trim() ? nextMergeName(it.src.name, allocNames) : nextMergeName('未命名', allocNames))
@@ -2348,6 +2757,10 @@ const LS_DRAFT = 'bgi_strategy_editor_drafts_v1';
 const LS_RARITY = 'bgi_strategy_editor_rarity_v1';
 const LS_UI = 'bgi_strategy_editor_ui_v1';
 const LS_RECENT = 'bgi_strategy_editor_recent_v1';
+/** 优先级预览页「模拟队伍过滤」里保存的队伍（只与本地有关，与战斗策略内容没有任何关联） */
+const LS_TEAMS = 'bgi_strategy_editor_teams_v1';
+/** 本地最多保存几支队伍（与原神里可保存的队伍数量一致） */
+const MAX_TEAMS = 20;
 
 /* ---------------- 全局状态 ---------------- */
 

@@ -2,15 +2,19 @@
 // 数据来源（BetterGI 源码）：
 //   1) better-genshin-impact-main/BetterGenshinImpact/GameTask/AutoFight/Assets/combat_avatar.json
 //      → 角色标准名、id、内置角色表次序（name 必须与之一致，否则动作会被静默过滤）
+//      → 该文件里的 alias 列表：**只**用来在网页的搜索框里匹配角色，永远不会显示出来，
+//        也不会写进任何导出的 JSON（页面上一律只显示标准名）。
 //   2) better-genshin-impact-main/BetterGenshinImpact/GameTask/AutoCombo/AvatarProfiles.cs
 //      → 元素标签（每个角色恰好一个 "X元素"），无档案者归入元素类型 0
 //
 // 编号规则：
 //   元素类型 0：当前角色(00，虚拟条目) / 旅行者(01) / 奇偶·男性(02) / 奇偶·女性(03)
 //   元素类型 1..7（冰 火 水 雷 风 岩 草）：按 combat_avatar.json 中出现次序从 01 递增
-//   星级别名表默认全部留空，由网页内补录后存 localStorage
+//   星级一律留空，由网页内补录后存 localStorage
 //
-// 用法：node tools/gen_avatars.mjs
+// 用法：node tools/gen_avatars.mjs [输出路径]
+//   不给输出路径时写回 src/js/data_avatars.js；
+//   给了就写到那个路径（用于先看一眼生成结果、或写进临时目录做对比）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,11 +27,63 @@ const repoCandidates = [
 ];
 const repo = repoCandidates.find(p => fs.existsSync(p)) || repoCandidates[0];
 const avatarJsonPath = path.join(repo, 'GameTask', 'AutoFight', 'Assets', 'combat_avatar.json');
-const profilesPath = path.join(repo, 'GameTask', 'AutoCombo', 'AvatarProfiles.cs');
-const outPath = path.join(root, 'src', 'js', 'data_avatars.js');
+const outPath = process.argv[2] ? path.resolve(process.argv[2]) : path.join(root, 'src', 'js', 'data_avatars.js');
+
+/** 在源码快照里找 AvatarProfiles.cs：BetterGI 挪过它的位置（AutoCombo / AutoCombo/ComboBuild），
+ *  所以先试几个已知路径，再退回递归查找，免得上游一动目录生成脚本就报 ENOENT。 */
+function findProfileFile() {
+  const known = [
+    path.join(repo, 'GameTask', 'AutoCombo', 'AvatarProfiles.cs'),
+    path.join(repo, 'GameTask', 'AutoCombo', 'ComboBuild', 'AvatarProfiles.cs'),
+  ];
+  for (const p of known) if (fs.existsSync(p)) return p;
+  const stack = [repo];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { continue; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (e.name === 'AvatarProfiles.cs') return p;
+    }
+  }
+  return known[0];
+}
+const profilesPath = findProfileFile();
 
 const avatars = JSON.parse(fs.readFileSync(avatarJsonPath, 'utf8'));
 const cs = fs.readFileSync(profilesPath, 'utf8');
+
+/**
+ * combat_avatar.json 里每个角色的 alias（该角色在玩家口中的其它写法）。
+ * 只用于网页搜索框的匹配，不参与编号、不写进导出 JSON、也不显示。
+ * 去重、去掉与标准名完全一样的、去掉空白项。
+ */
+const aliasOf = new Map();
+for (const a of avatars) {
+  const list = Array.isArray(a.alias) ? a.alias : [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of list) {
+    const t = String(raw === null || raw === undefined ? '' : raw).trim();
+    if (!t || t === a.name || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  aliasOf.set(a.name, out);
+}
+/** 把若干个角色的 alias 并起来（用于「荧 / 空」合并进「旅行者」这种同一角色的多条词条） */
+function mergedAlias(names) {
+  const seen = new Set();
+  const out = [];
+  for (const n of names) for (const t of (aliasOf.get(n) || [])) {
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
 
 // 解析 AvatarProfiles.cs 里的 new("角色名", "描述", [ ... ]) 元素标签
 const elementOf = new Map();
@@ -57,15 +113,24 @@ const ELEMENT_FALLBACK = {
 const result = [];
 const counters = {};
 
+/** 只有搜索用的其它写法时，才写进数据文件（没有的就不写这个字段） */
+function withAlias(obj, names) {
+  const alias = mergedAlias(names);
+  if (alias.length) obj.alias = alias;
+  return obj;
+}
+
 // 元素类型 0 的特殊条目
 result.push({
   code: 0, name: '当前角色', seq: 0, id: '', element: 0, noElement: true,
   virtual: true, note: 'character 字段留空，动作对所有当前出战角色生效'
 });
-result.push({
+// 旅行者与「荧 / 空」是同一角色的不同性别，只保留标准名「旅行者」，
+// 但这两条词条里的搜索用写法要一起并进来（否则搜「女主 / 男主」之类的写法找不到旅行者）。
+result.push(withAlias({
   code: 0, name: '旅行者', seq: 1, id: '20000000', element: 0, noElement: true,
   note: '荧/空 同一角色的两种性别；元素随命途变化，BetterGI 不识别其元素属性'
-});
+}, ['旅行者', '荧', '空']));
 let seq0 = 2;
 
 for (const a of avatars) {
@@ -74,26 +139,26 @@ for (const a of avatars) {
   if (MERGE_INTO_TRAVELER.has(name)) continue;
   if (NO_ELEMENT_NAMES.includes(name)) {
     if (name === '旅行者') continue; // 已手工加入
-    result.push({
+    result.push(withAlias({
       code: 0, name, seq: seq0++, id: a.id, element: 0, noElement: true,
       note: '无元素档案（主角类/特殊角色），BetterGI 不识别其元素属性'
-    });
+    }, [name]));
     continue;
   }
   const elemName = elementOf.get(name) || ELEMENT_FALLBACK[name];
   if (!elemName) {
-    result.push({
+    result.push(withAlias({
       code: 0, name, seq: seq0++, id: a.id, element: 0, noElement: true,
       note: 'AvatarProfiles.cs 中无元素档案，已归入元素类型 0'
-    });
+    }, [name]));
     continue;
   }
   const code = ELEMENT_CODE[elemName];
   counters[code] = (counters[code] || 0) + 1;
-  result.push({
+  result.push(withAlias({
     code, name, seq: counters[code], id: a.id, element: code,
     elementName: elemName, noElement: false
-  });
+  }, [name]));
 }
 
 // 排序：元素类型 0..7，同元素按 seq
