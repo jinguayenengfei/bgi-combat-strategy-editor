@@ -1,0 +1,898 @@
+{
+  "info": {
+    "name": "编辑测试（仅作示例）",
+    "author": "jinguayenengfei",
+    "version": "v0.2",
+    "description": "测试编辑器功能用策略，缺少实战验证，效果可能不及预期，擅自使用后果自负！\n\n请注意！！！使用本JSON策略前，请按照以下说明配置好队伍和调度器的战斗设置！\n\n无论在任何情况下，使用自动战斗功能都务必严格遵守BGI配队逻辑！配队逻辑为“盾（刚需）+奶（可选）+后台C（可选）+其他（如果需要捡材料，请带万叶或琴）”。其中，盾位必须带且只能带一个，盾量不够用千岩套补；其他三个位置没有硬性要求，推荐攻击距离远、索敌远的角色；万叶和琴不要一起带，捡材料只要带一个就够了。\n\n战斗配置设置流程\n该设置从调度器入口开始，按以下层级路径操作，核心为开启相关功能并配置关键参数。独立任务中的自动战斗，也可以在独立任务下展开其设置后，参考以下流程设置。\n\n1. 进入战斗配置页面\n路径：调度器 → 配置组 → 设置 → 战斗配置\n操作：将 “战斗配置” 功能开启！（必须同时开启上方的“地图追踪行走配置”和此处的“战斗配置”，底下的设置才能生效，每个配置组设置是相互独立的。“地图追踪行走配置”的设置请参考配置组里的JS脚本或地图追踪任务的相关说明，不同的JS脚本在这方面的要求各不相同）\n\n2. 战斗结束检测相关设置（----------此处只说明公版BGI的设置项----------）\n下面将按照所有可展开项全部展开后，在界面上的位置顺序，从上到下依次说明。值得一提的是，旋转寻找敌人位置可以让角色主动接近敌人，对战斗效率有明显提升。\n自动检测战斗结束：开启\n更快检查结束战斗：开启\n更快触发战斗结束检查参数：0.4\n切人后再执行战斗结束检查：开启\n敌人可见时跳过战斗结束检查：关闭（看远处丘丘人跳舞看到超时结束很好玩么？还与旋转索敌互斥）\n开战后一段时间阻断战斗结束检查（秒）设置为：1（需要打像原海异种或丘丘人哨塔那样的无敌意敌人则填10）\n派蒙辅助检测：开启（务必开启，不可遮挡左上角派蒙图标）\n派蒙检测延时（秒）: 设置为： 0.2（默认值）\n旋转寻找敌人位置：开启（旋转速度把条拉到最右边，再往左拉一格就好，过快会导致卡检测以及乱转，要是真卡检测了就往左拉更多）\nQ 前检测：关闭\n尝试面向敌人：开启\n检查战斗结束的延时：设置为：0.4;钟离,1.4;（默认值）\n按键触发后检查延时：设置为 ：0.4（默认值）\n\n3. 战斗中视觉识别配置\n此项的作用是在战斗中让视角持续朝向敌人，配合策略中的向前移动动作可改善角色索敌问题。\n战斗中持续索敌: 开启\n脱锁等待时间(秒)：0.5 （默认值）或更高（应根据你队伍中攻击距离最远的角色的攻击频率决定，具体怎么计算自己试）\n其余未提及选项保持默认即可。\n\n4. 盾奶位角色优先释放技能\n由于json策略可通过优先级机制实现盾奶技能优先释放，这一项无需开启。如果开启则绝对不能选错位置，选对无奖励，选错有惩罚！\n盾奶角色优先释放技能：关闭（空选即可）\n其余未提及选项保持默认即可。\n\n5. 战斗后拾取动作\n需根据队伍角色情况选择开启，核心注意万叶 / 琴的特殊设置。\n扫描掉落物光柱：关闭（队伍中有万叶 / 琴时，一定要关闭！！！）\n聚集材料动作：开启（该功能会自动选择万叶或琴（优先万叶），通过长 E 动作收集掉落物。）\n二次拾取：关闭（用万叶的情况下一定要关闭！）可选开启（使用琴的情况下）\n基于经验值判断拾取：关闭（或参考配置组中的地图追踪任务或JS脚本的说明进行设置）\n拾取战斗人次阈值：关闭（输入框留空，或参考配置组中的地图追踪任务或JS脚本的说明进行设置）\n只拾取精英掉落模式：关闭功能（或参考配置组中的地图追踪任务或JS脚本的说明进行设置）\n万叶拾取队伍名：留空（切队伍很废时间，要捡东西还是直接把万叶放战斗队伍吧）\n\n6. 自动战斗超时（秒）：60 或 120（默认值）（根据自己队伍练度和战斗难度来设置，建议用木桩类奇域测试一下60秒内打移动靶能灌多少伤害再做判断）\n\n7. 游泳检测：开启",
+    "config": {},
+    "preActions": []
+  },
+  "actions": [
+    {
+      "name": "兜底战斗检查循环",
+      "character": "",
+      "action": "check,wait(0.2),keydown(VK_W),wait(0.05),dash(0.2),wait(0.05),keyup(VK_W),wait(0.1)",
+      "condition": {
+        "expression": "(t > 10 && last-check > 8 && (! (last-check > t - 9.9) || count < 1)) && true"
+      },
+      "ensureCast": false,
+      "index": 1,
+      "tags": "防止某些不按策略描述内容设置战斗设置的蠢货在那问“为啥这脚本一直执行到战斗超时”。目前该指令仍处于试验阶段"
+    },
+    {
+      "name": "角色红血标记",
+      "character": "",
+      "action": "",
+      "condition": {
+        "expression": "low-hp && since > 3"
+      },
+      "ensureCast": false,
+      "index": 2,
+      "tags": "发现角色有红血的情况先记录下来，防止红血角色切下场后，回血技能的红血触发条件变成不满足"
+    },
+    {
+      "name": "动作频率检查-超过检查频率",
+      "character": "",
+      "action": "",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 3,
+      "tags": "用于检查无时间参数的动作是否存在高频触发的情况（例如0.4秒内执行了两次或1秒内执行了三次），算是一种调试用的动作。建议把调试目标指向执行时间少于0.5秒的动作，因为你在日志里是看不出来这种动作在1秒内执行了几次的（日志有1秒的防刷屏CD）",
+      "morePriorities": [
+        {
+          "expression": "since > 1 && max(count(93111,t-0.4,t),count(83161,t-0.4,t)) > 1",
+          "priority": 0
+        }
+      ]
+    },
+    {
+      "name": "莱依拉-开盾",
+      "character": "莱依拉",
+      "action": "e,wait(0.2),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": true,
+      "index": 11111
+    },
+    {
+      "name": "茜特菈莉-开盾",
+      "character": "茜特菈莉",
+      "action": "e,wait(0.4),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": true,
+      "index": 11161
+    },
+    {
+      "name": "尼可-开盾",
+      "character": "尼可",
+      "action": "e,wait(0.3),e,attack",
+      "condition": {
+        "expression": "e-ready && since > 16"
+      },
+      "ensureCast": true,
+      "index": 12181
+    },
+    {
+      "name": "伊涅芙-开盾",
+      "character": "伊涅芙",
+      "action": "e,wait(0.3),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": true,
+      "index": 14171
+    },
+    {
+      "name": "蓝砚-开盾",
+      "character": "蓝砚",
+      "action": "e,wait(0.1),e,wait(0.6),s(0.2),attack(0.33),dash(0.1),attack(0.55)",
+      "condition": {
+        "expression": "e-ready && since > 8"
+      },
+      "ensureCast": true,
+      "index": 15131
+    },
+    {
+      "name": "绮良良-开盾",
+      "character": "绮良良",
+      "action": "e,wait(0.4),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": true,
+      "index": 17011
+    },
+    {
+      "name": "哥伦比娅-e",
+      "character": "哥伦比娅",
+      "action": "walk(w,0.2),e,wait(0.1),e,wait(0.1),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": false,
+      "index": 23161
+    },
+    {
+      "name": "哥伦比娅-q",
+      "character": "哥伦比娅",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 23162
+    },
+    {
+      "name": "爱可菲-e",
+      "character": "爱可菲",
+      "action": "e,wait(0.3),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": false,
+      "index": 31171
+    },
+    {
+      "name": "芙宁娜-e",
+      "character": "芙宁娜",
+      "action": "e,wait(0.5),e,attack",
+      "condition": {
+        "expression": "e-ready && since > 26"
+      },
+      "ensureCast": false,
+      "index": 33111,
+      "morePriorities": [
+        {
+          "expression": "e-ready",
+          "priority": 60000
+        }
+      ]
+    },
+    {
+      "name": "莉奈娅-大锤",
+      "character": "莉奈娅",
+      "action": "e,wait(0.1),e,attack(0.62)",
+      "condition": {
+        "expression": "e-ready && since > 18 && since(36142) > 18 && ! (since(2) < min(since(),since(36142)))"
+      },
+      "ensureCast": false,
+      "index": 36141,
+      "tags": "岩莉莉大锤的攻击距离仅14米，爆发力高适合低压场景快速秒怪。旋转索敌有概率卡掉第一个E，所以需要补发短E打远处目标。"
+    },
+    {
+      "name": "莉奈娅-短e",
+      "character": "莉奈娅",
+      "action": "e,wait(0.1),e",
+      "condition": {
+        "expression": "e-ready && since > 18 && since(36141) > 18 && (since(2) < min(since(),since(36141)))"
+      },
+      "ensureCast": false,
+      "index": 36142,
+      "tags": "通过低血量检测判断高压力场景，高压力场景下用短E优先保长线输出能力"
+    },
+    {
+      "name": "茜特菈莉-q",
+      "character": "茜特菈莉",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 41161,
+      "morePriorities": [
+        {
+          "expression": "q-ready && since > 15 && onfield",
+          "priority": 20000
+        }
+      ]
+    },
+    {
+      "name": "夏沃蕾-q",
+      "character": "夏沃蕾",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 42131
+    },
+    {
+      "name": "夏沃蕾-e",
+      "character": "夏沃蕾",
+      "action": "attack,keydown(e),wait(0.2),moveby(0,300),wait(0.18),keyup(e),wait(0.1),e,attack",
+      "condition": {
+        "expression": "e-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 42132,
+      "morePriorities": [
+        {
+          "expression": "e-ready && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "e-ready && since(73111) < 6 && count(33111) > 0",
+          "priority": 33000
+        }
+      ]
+    },
+    {
+      "name": "琴-长e",
+      "character": "琴",
+      "action": "attack,keydown(e),wait(0.14),moveby(0,1300),wait(0.75),keyup(e),wait(0.4),attack",
+      "condition": {
+        "expression": "e-ready && since > 6"
+      },
+      "ensureCast": false,
+      "index": 45011
+    },
+    {
+      "name": "枫原万叶-中e",
+      "character": "枫原万叶",
+      "action": "attack,keydown(e),wait(0.48),keyup(e),attack(0.3),wait(0.5)",
+      "condition": {
+        "expression": "(e-ready && since > 6) && (true)"
+      },
+      "ensureCast": false,
+      "index": 45051,
+      "tags": "万叶0命时的动作，1命时停用",
+      "consRequirement": -1
+    },
+    {
+      "name": "枫原万叶-中e-一命特化",
+      "character": "枫原万叶",
+      "action": "attack,keydown(e),wait(0.48),keyup(e),attack(0.3),wait(0.5)",
+      "condition": {
+        "expression": "(e-ready && since > 5.4 || since > since(45053)) && (false)"
+      },
+      "ensureCast": false,
+      "index": 45052,
+      "tags": "万叶有一命时的动作，触发条件已随命座效果改变，注意需要使用面向角色的战斗策略编辑器来快捷启用，默认是停用状态",
+      "consRequirement": 1
+    },
+    {
+      "name": "枫原万叶-q",
+      "character": "枫原万叶",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 45053
+    },
+    {
+      "name": "丝柯克-常规q",
+      "character": "丝柯克",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15 && since(61182) > 15 && since(61181) > 12.5 && ! (max(e-cd(伊涅芙),e-cd(尼可),e-cd(茜特菈莉),e-cd(莱依拉),e-cd(蓝砚),e-cd(绮良良)) > 6)"
+      },
+      "ensureCast": false,
+      "index": 51181,
+      "tags": "盾位技能CD不够就走速切轴，优先保盾能续上"
+    },
+    {
+      "name": "丝柯克-长e",
+      "character": "丝柯克",
+      "action": "attack,keydown(e),wait(0.4),keyup(e)",
+      "condition": {
+        "expression": "! (max(e-cd(伊涅芙),e-cd(尼可),e-cd(茜特菈莉),e-cd(莱依拉),e-cd(蓝砚),e-cd(绮良良)) > 6) && (since > 8 && since(61181) > 14 && since(61184) > 8 && since(61183) > 9)"
+      },
+      "ensureCast": false,
+      "index": 51182,
+      "tags": "盾技能CD不够走速切，先靠长E回能开大"
+    },
+    {
+      "name": "玛薇卡-短e",
+      "character": "玛薇卡",
+      "action": "attack,e,wait(0.4)",
+      "condition": {
+        "expression": "e-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 52161,
+      "tags": "火神手法过于复杂，先写个占位的等后面再研究"
+    },
+    {
+      "name": "玛薇卡-q",
+      "character": "玛薇卡",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 18"
+      },
+      "ensureCast": false,
+      "index": 52162
+    },
+    {
+      "name": "丝柯克-短e",
+      "character": "丝柯克",
+      "action": "e,wait(0.1),e",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 61181,
+      "tags": "站场轴起手动作，一旦启动就得一直站前台输出，得确保盾位战技CD足够长",
+      "morePriorities": [
+        {
+          "expression": "since > 14 && since(51182) > 8 && since(61184) > 8 && since(61183) > 9 && (max(e-cd(伊涅芙),e-cd(尼可),e-cd(茜特菈莉),e-cd(莱依拉),e-cd(蓝砚),e-cd(绮良良)) > 6)",
+          "priority": 51190
+        }
+      ]
+    },
+    {
+      "name": "丝柯克-特殊q",
+      "character": "丝柯克",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 61182,
+      "tags": "站场轴的特殊大招",
+      "morePriorities": [
+        {
+          "expression": "onfield && (since(61181) < 5) && q-ready && since > 15 && since(51181) > 15",
+          "priority": 20000
+        }
+      ]
+    },
+    {
+      "name": "丝柯克-重击",
+      "character": "丝柯克",
+      "action": "charge(1)",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 61183,
+      "morePriorities": [
+        {
+          "expression": "onfield && since(61181) < 12.5 && since > 3 && since(61182) > 3",
+          "priority": 20000
+        }
+      ]
+    },
+    {
+      "name": "丝柯克-冰伤普攻",
+      "character": "丝柯克",
+      "action": "attack",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 61184,
+      "morePriorities": [
+        {
+          "expression": "onfield && since(61181) < 12.5",
+          "priority": 20000
+        }
+      ]
+    },
+    {
+      "name": "哥伦比娅-重击",
+      "character": "哥伦比娅",
+      "action": "charge(1)",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 63161,
+      "tags": "等月绽放队友的动作加入后再补充细节"
+    },
+    {
+      "name": "莱依拉-q",
+      "character": "莱依拉",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 12"
+      },
+      "ensureCast": false,
+      "index": 71111,
+      "morePriorities": [
+        {
+          "expression": "q-ready && since > 12 && onfield && since(11111) < 1",
+          "priority": 20000
+        }
+      ]
+    },
+    {
+      "name": "爱可菲-q",
+      "character": "爱可菲",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 71171,
+      "morePriorities": [
+        {
+          "expression": "q-ready && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "q-ready && since > 15 && since(73111) < 15 && count(33111) > 0",
+          "priority": 31180
+        }
+      ]
+    },
+    {
+      "name": "尼可-q",
+      "character": "尼可",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 72181
+    },
+    {
+      "name": "芭芭拉-e",
+      "character": "芭芭拉",
+      "action": "e,wait(0.4),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": false,
+      "index": 73011,
+      "morePriorities": [
+        {
+          "expression": "e-ready && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "e-ready && since(73111) < 3 && count(33111) > 0",
+          "priority": 34000
+        }
+      ]
+    },
+    {
+      "name": "芭芭拉-q",
+      "character": "芭芭拉",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 73012,
+      "tags": "纯回血技能，不残血不用。唯一有大招动画的4星。",
+      "morePriorities": [
+        {
+          "expression": "q-ready && since > 20 && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "q-ready && since > 20 && since(73111) < 15 && count(33111) > 0",
+          "priority": 33020
+        }
+      ]
+    },
+    {
+      "name": "芙宁娜-q",
+      "character": "芙宁娜",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 73111,
+      "morePriorities": [
+        {
+          "expression": "q-ready && onfield && since > 15",
+          "priority": 33120
+        }
+      ]
+    },
+    {
+      "name": "希格雯-长e",
+      "character": "希格雯",
+      "action": "e(hold),wait(0.2),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": false,
+      "index": 73121,
+      "morePriorities": [
+        {
+          "expression": "e-ready && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "e-ready && since(73111) < 3 && count(33111) > 0",
+          "priority": 34000
+        }
+      ]
+    },
+    {
+      "name": "希格雯-q",
+      "character": "希格雯",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 18"
+      },
+      "ensureCast": false,
+      "index": 73122
+    },
+    {
+      "name": "伊涅芙-q",
+      "character": "伊涅芙",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 74171
+    },
+    {
+      "name": "琴-q",
+      "character": "琴",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 20"
+      },
+      "ensureCast": false,
+      "index": 75011,
+      "morePriorities": [
+        {
+          "expression": "q-ready && since > 20 && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "q-ready && since > 20 && since(73111) < 7 && count(33111) > 0",
+          "priority": 35020
+        }
+      ]
+    },
+    {
+      "name": "蓝砚-q",
+      "character": "蓝砚",
+      "action": "q,ready",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 75131
+    },
+    {
+      "name": "莉奈娅-q",
+      "character": "莉奈娅",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 15"
+      },
+      "ensureCast": false,
+      "index": 76141,
+      "tags": "还得注意防止岩莉莉的Q把大锤吞了",
+      "morePriorities": [
+        {
+          "expression": "q-ready && (since > since(2)) && since > 15",
+          "priority": 18000
+        },
+        {
+          "expression": "q-ready && since > 15 && (since(73111) < 6) && count(33111) > 0",
+          "priority": 36150
+        }
+      ]
+    },
+    {
+      "name": "绮良良-q",
+      "character": "绮良良",
+      "action": "q,ready",
+      "condition": {
+        "expression": "q-ready && since > 16"
+      },
+      "ensureCast": false,
+      "index": 77011
+    },
+    {
+      "name": "白术-e",
+      "character": "白术",
+      "action": "e,wait(0.4),e,attack",
+      "condition": {
+        "expression": "e-ready"
+      },
+      "ensureCast": false,
+      "index": 77081,
+      "morePriorities": [
+        {
+          "expression": "e-ready && (since > since(2))",
+          "priority": 18000
+        },
+        {
+          "expression": "e-ready && since(73111) < 9 && count(33111) > 0",
+          "priority": 27090
+        }
+      ]
+    },
+    {
+      "name": "白术-q",
+      "character": "白术",
+      "action": "q,wait(0.1),ready",
+      "condition": {
+        "expression": "q-ready && since > 20"
+      },
+      "ensureCast": false,
+      "index": 77082
+    },
+    {
+      "name": "茜特菈莉-普攻",
+      "character": "茜特菈莉",
+      "action": "attack",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 81161,
+      "tags": "奶奶普攻向后退真没绷住",
+      "morePriorities": [
+        {
+          "expression": "count(81161,t-4,t-2) < 1",
+          "priority": 90000
+        }
+      ]
+    },
+    {
+      "name": "茜特菈莉-普攻后前进",
+      "character": "茜特菈莉",
+      "action": "walk(w,0.05),dash(0.2),wait(0.1),keydown(VK_W),wait(0.18),dash(0.2),wait(0.1),keyup(VK_W)",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 81162,
+      "tags": "用于研究后退前进补偿的试验性动作",
+      "morePriorities": [
+        {
+          "expression": "since > 4 && ! (count(81161,t-4,t-2) < 1) && since(81161) < 3 && onfield",
+          "priority": 80000
+        }
+      ]
+    },
+    {
+      "name": "芭芭拉-普攻",
+      "character": "芭芭拉",
+      "action": "charge(1),attack(0.5)",
+      "condition": {
+        "expression": "since(73011) < 20"
+      },
+      "ensureCast": false,
+      "index": 83011,
+      "morePriorities": [
+        {
+          "expression": "since(73011) < 12 && since(2) < 32",
+          "priority": 20000
+        }
+      ]
+    },
+    {
+      "name": "哥伦比娅-普攻",
+      "character": "哥伦比娅",
+      "action": "walk(w,0.05),attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 83161
+    },
+    {
+      "name": "白术-普攻",
+      "character": "白术",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 87081
+    },
+    {
+      "name": "等待",
+      "character": "",
+      "action": "wait(0.2)",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 90001,
+      "morePriorities": [
+        {
+          "expression": "",
+          "priority": 100000
+        }
+      ]
+    },
+    {
+      "name": "旅行者-普攻",
+      "character": "旅行者",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 90011
+    },
+    {
+      "name": "奇偶-男性-普攻",
+      "character": "奇偶·男性",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 90021
+    },
+    {
+      "name": "奇偶-女性-普攻",
+      "character": "奇偶·女性",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 90031
+    },
+    {
+      "name": "莱依拉-普攻",
+      "character": "莱依拉",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 91111
+    },
+    {
+      "name": "爱可菲-普攻",
+      "character": "爱可菲",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 91171
+    },
+    {
+      "name": "奥黛塔-普攻",
+      "character": "奥黛塔",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 91211
+    },
+    {
+      "name": "夏沃蕾-普攻",
+      "character": "夏沃蕾",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 92131
+    },
+    {
+      "name": "尼可-普攻",
+      "character": "尼可",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 92181
+    },
+    {
+      "name": "芙宁娜-普攻",
+      "character": "芙宁娜",
+      "action": "attack",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 93111,
+      "morePriorities": [
+        {
+          "expression": "",
+          "priority": 90000
+        }
+      ]
+    },
+    {
+      "name": "希格雯-普攻",
+      "character": "希格雯",
+      "action": "attack",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 93121,
+      "morePriorities": [
+        {
+          "expression": "",
+          "priority": 98000
+        }
+      ]
+    },
+    {
+      "name": "久岐忍-普攻",
+      "character": "久岐忍",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 94091
+    },
+    {
+      "name": "伊涅芙-普攻",
+      "character": "伊涅芙",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 94171
+    },
+    {
+      "name": "琴-普攻",
+      "character": "琴",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 95011
+    },
+    {
+      "name": "枫原万叶-普攻",
+      "character": "枫原万叶",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 95051
+    },
+    {
+      "name": "蓝砚-普攻",
+      "character": "蓝砚",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 95131
+    },
+    {
+      "name": "莉奈娅-普攻",
+      "character": "莉奈娅",
+      "action": "attack",
+      "condition": {
+        "expression": "false"
+      },
+      "ensureCast": false,
+      "index": 96141,
+      "tags": "莉奈娅普攻会向后退，对索敌不利。能让岩莉莉打普攻的也是万策尽了",
+      "morePriorities": [
+        {
+          "expression": "",
+          "priority": 98000
+        }
+      ]
+    },
+    {
+      "name": "绮良良-普攻",
+      "character": "绮良良",
+      "action": "attack",
+      "condition": {
+        "expression": ""
+      },
+      "ensureCast": false,
+      "index": 97011
+    }
+  ]
+}
