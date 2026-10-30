@@ -19,7 +19,7 @@ function filteredAvatars() {
       else if (r !== ui.filterRarity) continue;
     }
     if (ui.onlyTeam && team.length === 4 && !av.virtual && !team.includes(av.name)) continue;
-    if (q && !(av.name.toLowerCase().includes(q) || String(av.id || '').includes(q))) continue;
+    if (q && !avatarHitAll(av, q)) continue;
     list.push({ av, key, cnt });
   }
   return list;
@@ -117,6 +117,7 @@ function renderActionCard(act) {
   const cond = (act.conditionText || '').trim();
   const cmd = String(act.action || '').trim();
   const teamExpr = teammateExpr(act, state.strategy.actions);
+  const teamSummary = [teamExpr, consHasRequirement(act) ? `命座：${consDescribe(act)}` : ''].filter(Boolean).join(' ; ') || '（无）';
   const tags = String(act.tags || '');
   const key = (sec) => `${act.id}:${sec}`;
 
@@ -129,7 +130,7 @@ function renderActionCard(act) {
       ${act.ensureCast ? '<span class="pill" title="确保E技能释放成功">ensureCast</span>' : ''}
       ${mpCount ? `<span class="pill">其他 ×${mpCount}</span>` : ''}
       <span data-tagspill="${attr(act.id)}">${tagsPillHtml(tags)}</span>
-      <span class="dim" style="font-size:12px" data-cardsummary="${attr(act.id)}">${esc(cond || '（无条件=恒真）')}</span>
+      <span class="dim cardsummary" style="font-size:12px" data-cardsummary="${attr(act.id)}" title="动作指令串：${attr(cmd || '（空指令）')}">${esc(cmd || '（空指令）')}</span>
       <span style="flex:1"></span>
       <span data-cardbadges="${attr(act.id)}">${errs.length ? `<span class="badge err">${errs.length}</span>` : ''}${warns.length ? `<span class="badge warn">${warns.length}</span>` : ''}</span>
       <button class="mini" data-act="card-up" data-id="${attr(act.id)}">↑</button>
@@ -148,11 +149,11 @@ function renderActionCard(act) {
         ${renderCardCmdTab(act, pi, typeName, slotCnt)}
       </details>
       <details class="det" data-details="${attr(key('cond'))}" ${detailOpen(key('cond'), true) ? 'open' : ''}>
-        <summary>触发条件 <span class="hint prev">${esc(cond || '（空 = 恒真）')}</span></summary>
+        <summary>基础触发条件 <span class="hint prev">${esc(cond || '（空 = 恒真）')}</span></summary>
         ${renderCardCondTab(act)}
       </details>
       <details class="det" data-details="${attr(key('team'))}" ${detailOpen(key('team'), false) ? 'open' : ''}>
-        <summary>队友条件 <span class="hint prev">${esc(teamExpr || '（无）')}</span></summary>
+        <summary>队友与命座条件 <span class="hint prev">${esc(teamSummary)}</span></summary>
         ${renderCardTeamTab(act)}
       </details>
       <details class="det" data-details="${attr(key('more'))}" ${detailOpen(key('more'), false) ? 'open' : ''}>
@@ -232,9 +233,11 @@ function renderCardCmdTab(act, pi, typeName, slotCnt) {
 /** 条件输入框的 id（用于把快捷添加生成的片段插到光标位置） */
 const condRefId = (kind, id, idx) => (kind === 'morenew' ? `morenew:${id}` : kind === 'more' ? `more:${id}:${idx}` : kind === 'cond' ? `cond:${id}` : `${kind}:${id}:${idx}`);
 
-/** 读取条件目标当前文本 */
+/** 读取条件目标当前文本。
+ *  'morenew'（「添加其他触发条件」表单里还没入库的那条）已经不提供输入框了 ——
+ *  触发条件一律等条目加进列表之后在条目里编辑（见 renderCardMoreTabInner），所以这里返回空串。 */
 function getCondText(kind, id, idx) {
-  if (kind === 'morenew') return (state.ui.newMoreText || {})[id] || '';
+  if (kind === 'morenew') return '';
   if (kind === 'more') {
     const a = state.strategy.actions.find(x => x.id === id);
     const mp = a && a.morePriorities[Number(idx)];
@@ -244,19 +247,24 @@ function getCondText(kind, id, idx) {
   return a ? (a.conditionText || '') : '';
 }
 
-/** 写入条件目标文本 */
+/**
+ * 写入条件目标文本。
+ * kind 取值：'condtext'（主条件）/ 'moretext'（其他触发条件的触发条件）/
+ *            'morenewtext'（旧版「添加其他触发条件」表单里还没入库的那条，已废弃）/ 旧别名 'cond' / 'more'。
+ * 注意每个分支都要 return，否则会继续往下走到「主条件」那一段，
+ * 把这条动作的 conditionText 写成其他触发条件的文本（或者反过来被清空）。
+ */
 function writeCondText(kind, id, idx, text) {
-  if (kind === 'morenew') {
-    if (!state.ui.newMoreText) state.ui.newMoreText = {};
-    state.ui.newMoreText[id] = text;
-    return;
-  }
-  if (kind === 'more') {
+  if (kind === 'morenew' || kind === 'morenewtext') return;   // 表单里已经没有这个输入框了
+  if (kind === 'more' || kind === 'moretext') {
+    if (!id) return;
     const a = state.strategy.actions.find(x => x.id === id);
     const mp = a && a.morePriorities[Number(idx)];
     if (mp) mp.text = text;
     return;
   }
+  if (kind !== 'condtext' && kind !== 'cond') return;
+  if (!id) return;
   const a = state.strategy.actions.find(x => x.id === id);
   if (a) a.conditionText = text;
 }
@@ -282,14 +290,22 @@ function condCaretTextarea(kind, id, idx) {
  * 条件输入框的「模型 → 输入框」同步。
  * 快捷添加条件插入片段后会重建整块面板，重建出来的输入框必须显示模型里的内容；
  * 这里再兜一次底：只要输入框还挂在文档里、内容与模型不一致，就以模型为准写回去，
- * 避免出现“模型里已经有内容（点“添加其他触发条件”能带进新条目），但输入框看起来被清空了”的情况。
+ * 避免出现“模型里已经有内容（点「添加其他触发条件」能带进新条目），但输入框看起来被清空了”的情况。
+ * 同时它也是「写回」的反向兜底：某次把界面内容写回模型之后，界面上的旧值必须一起更新，
+ * 否则下一次写回又会拿这个**过期的旧值**覆盖模型 —— 那正是「最后一次编辑的内容在草稿重载后消失」的成因。
  */
 function syncCondTextareasFromModel() {
   document.querySelectorAll('textarea[data-cond-ref]').forEach(el => {
+    if (!el || !el.getAttribute || el.isConnected === false) return;
     const info = condFieldInfo(el);
     if (!info) return;
     const want = getCondText(info.kind, info.id, info.idx);
-    if (el.value !== want) el.value = want;
+    if (el.value === want) return;
+    // 用户正在这个输入框里打字（含输入法组字）时不动它：这时它的内容就是最新的，等事件来写回模型即可
+    if (typeof document !== 'undefined' && document.activeElement === el) return;
+    el.value = want;
+    // 顺手把释义 / 预览按模型内容就地刷新，界面与模型不会再出现两套说法
+    if (typeof updateCondExplanation === 'function') updateCondExplanation(info);
   });
 }
 
@@ -412,22 +428,17 @@ function cfCharQuery(st, key) {
   return st.cq[key];
 }
 
-/**
- * 「动作参数」选择器里角色筛选下拉的选项与「当前角色」的哨兵值。
- * 「当前角色」在动作模型里的 character 是空字符串，而 <option value=""> 已经是「（全部角色）」，
- * 两者共用空值会让「当前角色」既选不中、又表现成“选了但筛选没生效”（下拉会跳回「全部角色」）。
- * 所以筛选下拉的选项值用这个哨兵值表示「当前角色」；筛选状态里存的就是这个值，
- * 判断时由 cfFilterAllowsChar 负责把它翻译回模型里的空字符串。
- */
-const CF_CHAR_CURRENT = '__current__';
-
 /** 筛选下拉里选了「（全部角色）」= 不筛选；选了「当前角色」= 只留 character 为空的动作 */
 function cfFilterAllowsChar(charFilter, character) {
   if (charFilter === null || charFilter === undefined || charFilter === '') return true;
   return (character || '') === (charFilter === CF_CHAR_CURRENT ? '' : charFilter);
 }
 
-/** 角色筛选下拉：只列“已经添加了动作”的角色，并显示条数（当前选中的角色即使被搜索词过滤也保留，避免选择凭空消失） */
+/**
+ * 「角色筛选下拉」的选项：**只由旁边的角色搜索框决定**，只列“已经添加了动作”的角色。
+ * 当前选中的角色即使被搜索词过滤也保留，避免选择凭空消失。
+ * 搜索词命中「当前角色」时额外给一个只留 character 为空的动作的哨兵选项。
+ */
 function cfCharFilterOptions(q, cur) {
   const cnt = new Map();
   for (const a of state.strategy.actions) {
@@ -436,55 +447,61 @@ function cfCharFilterOptions(q, cur) {
   }
   const ql = String(q || '').trim().toLowerCase();
   const rows = [`<option value="" ${!cur ? 'selected' : ''}>（全部角色）</option>`];
+  const used = new Set(['']);
   for (const [k, n] of cnt) {
     const value = k === '' ? CF_CHAR_CURRENT : k;
-    const hay = (k || '当前角色').toLowerCase();
-    if (ql && !hay.includes(ql) && value !== cur) continue;
+    if (!avatarMatchesQuery(k, ql) && value !== cur) continue;
+    used.add(value);
     // 「当前角色」（character 为空）用哨兵值，避免和「（全部角色）」的空值撞车
     rows.push(`<option value="${attr(value)}" ${cur === value ? 'selected' : ''}>${esc(k || '当前角色')}（${n} 条）</option>`);
+  }
+  if (cur && !used.has(String(cur))) {
+    rows.push(`<option value="${attr(cur)}" selected>${esc(String(cur) === CF_CHAR_CURRENT ? '当前角色' : cur)}（0 条）</option>`);
   }
   return rows.join('');
 }
 
-/** 动作下拉：值为动作节点的 index（已选中的动作即使被角色筛选排除也保留） */
+/**
+ * 动作下拉：值为动作节点的 index。
+ * **只按「角色筛选下拉」筛选**，不看角色搜索框 —— 搜索框只负责筛选那个角色下拉。
+ * 已选中的动作即使被角色筛选排除也保留，避免选择凭空消失。
+ */
 function cfActionOptions(charFilter, selected) {
-  const list = state.strategy.actions.filter(a => cfFilterAllowsChar(charFilter, a.character) || String(a.index) === String(selected));
-  list.sort((a, b) => a.index - b.index);
+  const allowed = state.strategy.actions.filter(a => cfFilterAllowsChar(charFilter, a.character) || String(a.index) === String(selected));
+  allowed.sort((a, b) => a.index - b.index);
   const rows = [`<option value="">（默认：本动作）</option>`];
-  for (const a of list) {
+  for (const a of allowed) {
     const inFilter = cfFilterAllowsChar(charFilter, a.character);
     rows.push(`<option value="${a.index}" ${String(selected) === String(a.index) ? 'selected' : ''}>${a.index} · ${esc(a.name || '(未命名)')}${inFilter ? '' : ` · ${esc(a.character || '当前角色')}`}</option>`);
   }
   return rows.join('');
 }
 
-/** 角色下拉（可按搜索词过滤；已选中的角色始终保留） */
+/** 角色下拉（选项只按搜索词过滤；已选中的角色始终保留） */
 function cfCharOptions(q, selected) {
-  const ql = String(q || '').trim().toLowerCase();
-  const rows = [`<option value="">（默认：本动作的角色）</option>`];
-  for (const a of AVATARS) {
-    if (a.virtual) continue;
-    if (ql && !a.name.toLowerCase().includes(ql) && selected !== a.name) continue;
-    rows.push(`<option value="${attr(a.name)}" ${selected === a.name ? 'selected' : ''}>${esc(a.name)}</option>`);
-  }
-  return rows.join('');
+  return `<option value="">（默认：本动作的角色）</option>`
+    + avatarFilterOptions(q, selected, { allLabel: '', allValue: '', keepAll: false });
 }
 
-/** 动作参数：角色筛选 + 角色搜索 + 动作下拉（选中的是动作 index） */
+/**
+ * 动作参数：角色筛选下拉（**只由角色搜索框筛选**）+ 角色搜索框 + 动作下拉（**只由角色筛选下拉筛选**）。
+ * 角色搜索框自己不再弹任何候选层；它唯一的输出就是旁边那个角色下拉里的选项。
+ */
 function cfActionPicker(st, key, value) {
   const f = cfActionFilter(st, key);
   return `<span class="row" style="gap:6px;margin:2px 0">
-      <select data-cfchar="${attr(key)}" style="width:150px" title="按角色筛选动作">${cfCharFilterOptions(f.q, f.char)}</select>
-      <input data-cfcharq="${attr(key)}" style="width:90px" value="${attr(f.q)}" placeholder="搜索角色">
-      <select data-cfp="${attr(key)}" style="width:250px">${cfActionOptions(f.char, value)}</select>
+      <select data-cfchar="${attr(key)}" style="width:150px" title="角色筛选：选项由旁边的角色搜索框筛选；动作下拉只按这里筛选">${cfCharFilterOptions(f.q, f.char)}</select>
+      <input data-cfcharq="${attr(key)}" value="${attr(f.q || '')}" placeholder="搜索角色名 / 编号" title="搜索词只用来筛选左边的角色筛选下拉" style="width:110px">
+      <select data-cfp="${attr(key)}" style="width:250px" title="动作选项：只按左边的角色筛选下拉筛选">${cfActionOptions(f.char, value)}</select>
     </span>`;
 }
 
-/** 角色参数：角色下拉 + 角色搜索 */
+/** 角色参数：角色下拉（只按搜索词过滤）+ 角色搜索框 */
 function cfCharPicker(st, key, value) {
+  const q = cfCharQuery(st, key);
   return `<span class="row" style="gap:6px;margin:2px 0">
-      <select data-cfp="${attr(key)}" style="width:150px">${cfCharOptions(cfCharQuery(st, key), value)}</select>
-      <input data-cfcs="${attr(key)}" style="width:90px" value="${attr(cfCharQuery(st, key))}" placeholder="搜索角色">
+      <select data-cfp="${attr(key)}" style="width:150px" title="角色选项：由旁边的角色搜索框筛选">${cfCharOptions(q, value)}</select>
+      <input data-cfcs="${attr(key)}" value="${attr(q || '')}" placeholder="搜索角色名 / 编号" title="搜索词只用来筛选左边的角色下拉" style="width:110px">
     </span>`;
 }
 
@@ -507,6 +524,72 @@ function cfCountOptions(n, min) {
   return rows.join('');
 }
 
+/* ---------------- 条件函数里的「时间入参」（count 的起始 / 结束时间） ----------------
+ * BetterGI 的 count(动作,时间1,时间2) 两个时间入参都以「开战」为基准（EvalCount 里
+ * start 默认 0、end 默认当前 t，直接与执行记录的时间戳比较），所以：
+ *   · 直接填一个数值           → 距开战的第 N 秒（保持 BetterGI 的原意）；
+ *   · 想表达「距当前时间 t 之前 N 秒」→ 必须写成 t-N（start/end 是动态求值的表达式）；
+ *   · 想表达「从目标动作上次执行到现在」→ 写成 t-since(动作)（t 减去 since()）。
+ * 这三种写法都用选择项生成，避免用户手算错基准。
+ */
+const CF_TIME_MODES = [
+  ['num', '（时间值）'],
+  ['tmi', 't-（时间值）'],
+  ['tsi', 't-since(动作)'],
+];
+
+/** 时间入参当前选择的模式（缺省 = 直接填时间值） */
+function cfTimeMode(st, tag) {
+  const v = (st.vals || {})[tag + 'Mode'];
+  if (v === 'num' || v === 'tmi' || v === 'tsi') return v;
+  return 'num';
+}
+
+/** 时间入参 → 写进 count() 的实参文本 */
+function cfTimeArgText(st, tag) {
+  const V = (k) => ((st.vals && st.vals[k] !== undefined && st.vals[k] !== null) ? String(st.vals[k]).trim() : '');
+  const mode = cfTimeMode(st, tag);
+  const num = V(tag + 'Num');
+  if (mode === 'tmi') return num === '' || Number(num) === 0 ? 't' : `t-${num}`;
+  if (mode === 'tsi') {
+    const a = V(tag + 'Since');
+    return a === '' ? 't-since()' : `t-since(${a})`;
+  }
+  return num;
+}
+
+/**
+ * 一个时间入参的完整输入区：
+ *   模式下拉 + 数值框（模式 1、2）+ 目标动作选择器（模式 3，含角色筛选与角色搜索框）。
+ * 两行都渲染出来，靠 hidden 切换显示 —— 不重建 DOM，输入焦点与输入法都不受影响。
+ */
+function cfTimeParts(st, key, title) {
+  const mode = cfTimeMode(st, key);
+  const V = (k) => cfTimeVal(st, k);
+  return `<div class="row" style="gap:6px;margin:2px 0">
+      <span class="hint">${esc(title)}</span>
+      <select data-cfp="${attr(key)}Mode" style="width:150px" title="选择这个时间入参的表达方式">${CF_TIME_MODES.map(([v, t]) => `<option value="${attr(v)}" ${mode === v ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      <input data-cfp="${attr(key)}Num" type="number" step="any" style="width:110px" value="${attr(V(key + 'Num'))}" placeholder="秒数" ${mode === 'tsi' ? 'hidden' : ''}>
+    </div>
+    <div class="row" style="gap:6px;margin:2px 0" ${mode === 'tsi' ? '' : 'hidden'} data-cftime="${attr(key)}">
+      <span class="hint">目标动作</span>
+      ${cfActionPicker(st, key + 'Since', V(key + 'Since'))}
+      <span class="hint">（留空 = 本动作）</span>
+    </div>`;
+}
+
+/** 切换时间入参模式：只切换显示，不重建参数面板（输入焦点与输入法都不受影响） */
+function cfSwitchTimeMode(box, key, mode) {
+  const num = box.querySelector(`[data-cfp="${cssEsc(key)}Num"]`);
+  if (num) num.hidden = mode === 'tsi';
+  const row = box.querySelector(`[data-cftime="${cssEsc(key)}"]`);
+  if (row) row.hidden = mode !== 'tsi';
+}
+function cfTimeVal(st, k) {
+  const v = st && st.vals ? st.vals[k] : undefined;
+  return v === undefined || v === null ? '' : String(v);
+}
+
 /** 生成一个条件函数片段（不弹窗、就地生成，可插到输入框的光标位置） */
 function buildCondSnippet(fn, get) {
   const opt = (v) => {
@@ -522,9 +605,14 @@ function buildCondSnippet(fn, get) {
     }
     case 'count': {
       const a = opt(get('a'));
-      const b = opt(get('b'));
-      const c = opt(get('c'));
-      const args = a ? [a, b, c].filter(x => x !== null).join(',') : '';
+      const view = { vals: { bMode: get('bMode'), bNum: get('bNum'), bSince: get('bSince'), cMode: get('cMode'), cNum: get('cNum'), cSince: get('cSince') } };
+      const b = cfTimeArgText(view, 'b');
+      const c = cfTimeArgText(view, 'c');
+      // 只指定了目标动作、两个时间都留空时，直接写 count(目标动作)，不要再拖两个空逗号。
+      // 只要指定了开始或结束时间，就必须保留两个逗号占位（count(动作,,结束) / count(动作,开始,)），
+      // 否则 BetterGI 会把「开始时间」当成目标动作之外的另一个参数位置。
+      const timesGiven = !!(b || c);
+      const args = a ? (timesGiven ? [a, b, c].join(',') : a) : (timesGiven ? `,${b},${c}` : '');
       return condCmpExpr(`count${args ? `(${args})` : ''}`, get('cmp'), get('num'));
     }
     case 'last-check':
@@ -555,13 +643,26 @@ function buildCondSnippet(fn, get) {
     // 组合 2：多个动作中是否有至少一个动作执行超过指定次数 → max(count(…,…,…),…) > 数值
     case 'combo-max-count': {
       const n = clamp(Number(get('n')) || 2, 1, 9);
-      const b = opt(get('b'));
-      const c = opt(get('c'));
+      const view = { vals: { bMode: get('bMode'), bNum: get('bNum'), bSince: get('bSince'), cMode: get('cMode'), cNum: get('cNum'), cSince: get('cSince') } };
+      const b = cfTimeArgText(view, 'b');
+      const c = cfTimeArgText(view, 'c');
       const items = [];
       for (let i = 1; i <= n; i++) {
         const a = opt(get('arg' + i));
-        const args = a ? [a, b, c].filter(x => x !== null).join(',') : '';
+        // 与单独的 count 相同：只选了目标动作、两个时间都留空时写成 count(动作)；
+        // 只要填了开始或结束时间，两个逗号都要保留。
+        const args = a ? ((b || c) ? [a, b, c].join(',') : a) : ((b || c) ? `,${b},${c}` : '');
         items.push(args ? `count(${args})` : 'count()');
+      }
+      return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
+    }
+    // 组合 3：多个角色的 E 剩余冷却时间中是否有至少一个超过 → max(e-cd(角色1),e-cd(角色2),…) > 数值
+    case 'combo-max-ecd': {
+      const n = clamp(Number(get('n')) || 2, 1, 9);
+      const items = [];
+      for (let i = 1; i <= n; i++) {
+        const a = opt(get('arg' + i));
+        items.push(`e-cd${a ? `(${a})` : ''}`);
       }
       return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
     }
@@ -582,11 +683,9 @@ function renderCondFnParams(ref, st) {
         ${cfCmpRow(st, '')}`;
     case 'count': {
       return `<div class="row"><label class="f">目标动作 ${cfActionPicker(st, 'a', V('a'))}</label></div>
-        <div class="row">
-          <label class="f">起始秒 <input data-cfp="b" type="number" step="any" style="width:110px" value="${attr(V('b'))}" placeholder="可空"></label>
-          <label class="f">结束秒 <input data-cfp="c" type="number" step="any" style="width:110px" value="${attr(V('c'))}" placeholder="可空"></label>
-        </div>
-        <div class="hint">目标动作留空表示“本动作”；起始/结束秒留空表示开战到当前时间。</div>
+        ${cfTimeParts(st, 'b', '起始时间')}
+        ${cfTimeParts(st, 'c', '结束时间')}
+        <div class="hint">目标动作留空表示“本动作”。两个时间入参以<b>开战</b>为基准：「（时间值）」= 距开战的第 N 秒（留空 = 开战 / 当前时间）；「t-（时间值）」= 距当前时间 t 往前 N 秒（留空或 0 只写 t）；「t-since(动作)」= 从该动作上次执行到现在（留空 = 本动作）。</div>
         ${cfCmpRow(st, '')}`;
     }
     case 'last-check':
@@ -623,17 +722,39 @@ function renderCondFnParams(ref, st) {
       for (let i = 1; i <= n; i++) {
         html += `<div class="row"><label class="f">参数 ${i} 的目标动作 ${cfActionPicker(st, 'arg' + i, V('arg' + i))}</label></div>`;
       }
-      html += `<div class="row">
-          <label class="f">起始秒（统一应用） <input data-cfp="b" type="number" step="any" style="width:110px" value="${attr(V('b'))}" placeholder="可空"></label>
-          <label class="f">结束秒（统一应用） <input data-cfp="c" type="number" step="any" style="width:110px" value="${attr(V('c'))}" placeholder="可空"></label>
-        </div>
-        <div class="hint">起始/结束秒会统一写进 max() 里的每一项 count()；目标动作留空表示“本动作”（此时该 count 不会写入起始/结束秒）。</div>`;
+      html += cfTimeParts(st, 'b', '起始时间（统一应用）');
+      html += cfTimeParts(st, 'c', '结束时间（统一应用）');
+      html += `<div class="hint">起始/结束时间会统一写进 max() 里的每一项 count()（写法与 count 的说明相同，都以开战为基准）；目标动作留空表示“本动作”（此时该 count 不写入时间）。</div>`;
       html += '<div class="hint">只要这些动作里<b>有一个</b>“在指定时间区间内执行次数大于”下面的数值，条件就成立；从未执行过的动作次数为 0，不影响判断。</div>';
+      html += cfCmpRow(st, '>');
+      return html;
+    }
+    case 'combo-max-ecd': {
+      const n = clamp(Number(V('n')) || 2, 1, 9);
+      let html = `<div class="row"><label class="f">参数项数 <select data-cfp="n" style="width:70px">${cfCountOptions(n, 1)}</select></label>
+        <span class="hint">max() 里的项数（1~9）；每一项对应一个 e-cd(角色)</span></div>`;
+      for (let i = 1; i <= n; i++) {
+        html += `<div class="row"><label class="f">参数 ${i} 的目标角色 ${cfCharPicker(st, 'arg' + i, V('arg' + i))}</label></div>`;
+      }
+      html += '<div class="hint">只要这些角色里<b>有一个</b>“E 剩余冷却时间大于”下面的数值，条件就成立；目标角色留空表示“本动作的角色”（写成空参数的 <span class="pill">e-cd()</span>）。</div>';
       html += cfCmpRow(st, '>');
       return html;
     }
     default: return '';
   }
+}
+
+/**
+ * 条件函数下拉里的选项名。
+ * 只包含单一函数的选项要补上函数本身的写法（「距开战时间」→「距开战时间 —— t」），
+ * 方便直接看出会插入什么函数；组合函数（模板里还带参数占位）的选项名后已经写了
+ * 完整的算式（如 min(since(参数1),…) < 参数a），再补一次只会更长，所以保持原样。
+ */
+function cfOptionLabel(label, tpl) {
+  const t = String(tpl === undefined || tpl === null ? '' : tpl).trim();
+  if (!t) return String(label);
+  if (/[(),\s]/.test(t)) return `${label} —— ${t}`;
+  return `${label} —— ${t.replace(/[（(].*$/, '')}`;
 }
 
 /** 快捷添加条件（就地展开的整块 UI） */
@@ -648,7 +769,7 @@ function renderCondQuickAdd(ref, kind, id, idx) {
         <label class="f">条件函数
           <select data-cfp="fn" style="width:200px">
             <option value="">（请选择）</option>
-            ${COND_QUICK_FUNCS.map(([n, label, tpl]) => `<option value="${attr(n)}" ${st.fn === n ? 'selected' : ''}>${esc(label)}${tpl && tpl !== n ? ` — ${esc(tpl)}` : ''}</option>`).join('')}
+            ${COND_QUICK_FUNCS.map(([n, label, tpl]) => `<option value="${attr(n)}" ${st.fn === n ? 'selected' : ''}>${esc(cfOptionLabel(label, tpl))}</option>`).join('')}
           </select>
         </label>
         <button type="button" class="mini primary" data-cf="ins" ${st.fn ? '' : 'disabled'}>插入此片段到光标位置</button>
@@ -740,20 +861,36 @@ function onCfInput(box, el) {
   const charKey = el.getAttribute('data-cfchar');
   if (charKey !== null) {
     cfActionFilter(st, charKey).char = el.value;
+    // 选完角色就把旁边的搜索框清空：搜索词只负责把角色下拉缩小到几个候选，
+    // 选完恢复成全部角色，免得角色下拉一直卡在筛选结果里。
+    const f = cfActionFilter(st, charKey);
+    if (f.q) {
+      f.q = '';
+      const box2 = box.querySelector(`[data-cfcharq="${cssEsc(charKey)}"]`);
+      if (box2) box2.value = '';
+    }
     refreshActionPicker(box, ref, st, charKey);
     return;
   }
-  // 角色搜索框（筛选动作选择器的角色列表）
+  // 角色搜索框：只刷新旁边那个角色筛选下拉的选项（自己不弹任何候选层）
   const charQKey = el.getAttribute('data-cfcharq');
   if (charQKey !== null) {
     cfActionFilter(st, charQKey).q = el.value;
+    const f = cfActionFilter(st, charQKey);
+    // 搜索词过滤掉当前选中的角色时，顺手把筛选恢复成「全部角色」，
+    // 否则动作下拉会一直卡在“已选角色被过滤但选择仍生效”的状态里。
+    if (f.char && !avatarMatchesQuery(f.char === CF_CHAR_CURRENT ? '' : f.char, String(el.value || '').trim().toLowerCase())) {
+      f.char = '';
+      const sel = box.querySelector(`[data-cfchar="${cssEsc(charQKey)}"]`);
+      if (sel) sel.value = '';
+    }
     refreshActionPicker(box, ref, st, charQKey);
     return;
   }
-  // 角色搜索框（筛选角色名下拉）
+  // 角色搜索框（角色参数）：只刷新角色下拉的选项
   const charSKey = el.getAttribute('data-cfcs');
   if (charSKey !== null) {
-    cfCharQuery(st, charSKey);
+    if (!st.cq) st.cq = {};
     st.cq[charSKey] = el.value;
     refreshCharPicker(box, ref, st, charSKey);
     return;
@@ -773,6 +910,8 @@ function onCfInput(box, el) {
     return;
   }
   st.vals[key] = el.value;
+  // 时间入参（count 的起始/结束时间）切换表达方式：只切换显示哪一行输入框，不重建参数面板
+  if (/^[bc]Mode$/.test(key)) cfSwitchTimeMode(box, key.slice(0, 1), el.value);
   // 参数项数变化时要重建参数输入框
   if (key === 'n') {
     const box2 = box.querySelector('[data-cfparams]');
@@ -861,15 +1000,20 @@ function updateCondExplanation(info) {
   if (hint) hint.innerHTML = moreHintHtml(text, info.id);
 }
 
-/** 条件编辑区（直接输入框 + 快捷添加 + 释义 + 运算顺序预览 + 运算顺序说明） */
+/** 条件编辑区（直接输入框 + 快捷添加 + 释义 + 运算顺序预览 + 运算顺序说明）
+ *  opts.note 可以覆盖输入框上方那段说明：基础触发条件与「其他触发条件」的说明不同
+ *  （基础条件要写“高血量、前置未执行、可能从未释放过”那一套假定，
+ *   其他触发条件写的是“不符合基础条件假定的条件”，所以各传各的文案）。
+ */
 function renderCondEditor(kind, id, idx, opts) {
-  const o = Object.assign({ text: '', title: '', intro: '' }, opts || {});
+  const o = Object.assign({ text: '', title: '', intro: '', note: '' }, opts || {});
   const ref = refIdOf(kind, id, idx);
   const text = o.text === undefined || o.text === null ? getCondText(kind, id, idx) : o.text;
   const st = condSnippetState(ref);
+  const note = o.note || `${o.title || '触发条件表达式'}：这里写入的条件应遵守“高血量，所需前置动作未执行，动作可能从未释放过”的基础条件假定，用于对其他状况做判定的条件应该写入“其他触发条件”中`;
   return `
     ${o.intro ? `<div class="hint" style="margin:8px 0 6px">${o.intro}</div>` : ''}
-    <div class="hint" style="margin-bottom:4px">${esc(o.title || '触发条件表达式')}（可直接手输，也可以用下面的「快捷添加条件」拼）</div>
+    <div class="hint" style="margin-bottom:4px">${esc(note)}</div>
     ${ctrl({ tag: 'textarea', kind: kind === 'more' ? 'moretext' : (kind === 'morenew' ? 'morenewtext' : 'condtext'), actionId: id, idx, field: 'text', value: text || '', rows: 2, cls: 'mono', placeholder: '例如：low-hp || since(33011)>20　（留空 = 恒真）', extra: ` data-cond-ref="${attr(ref)}"` })}
     <details class="det sub" data-details="${attr(ref)}:quickadd" ${detailOpen(`${ref}:quickadd`, false) ? 'open' : ''}><summary>快捷添加条件</summary>
       ${renderCondQuickAdd(ref, kind, id, idx)}
@@ -883,8 +1027,7 @@ function renderCondPreview(text, actionId) {
   const parsed = condParse(text || '', allActionNames(state.strategy.actions));
   if (parsed.error) return `<div class="errbox">${esc(parsed.error)}</div>`;
   if (!parsed.ast) {
-    return `<div class="warnbox">表达式为空：空条件<b>恒为真</b>，也就是说只要按 priority 轮到这条动作，它就会被执行（不满足条件的动作根本不会被考虑，所以不需要额外写条件）。</div>
-      <div class="hint" style="margin-top:4px">如果你想临时停用这条动作又不想删掉它，把表达式写成 <span class="pill">false</span>（恒假）即可。</div>`;
+    return `<div class="warnbox">表达式为空：空条件<b>恒为真</b>，也就是说只要按 priority 轮到这条动作，它就会被执行（不满足条件的动作根本不会被考虑，所以不需要额外写条件）。</div>`;
   }
   const rows = [];
   const ctx = actionId ? condExplainCtx(actionId) : null;
@@ -902,6 +1045,57 @@ function renderCardCondTab(act) {
   return withCondUiAction(act.id, () => renderCardCondTabInner(act));
 }
 
+/**
+ * 「队友与命座条件」区块下的子项：命座要求（consRequirement）。
+ * BetterGI 的动作节点里没有能保存命座要求的地方，本编辑器约定用自定义字段 consRequirement
+ * 保存（BetterGI 会静默忽略未知字段），数值含义见 core.js 顶部说明。
+ * 这里编辑的是「模式 + 目标命座数 + 按达到x命设置动作启用/停用」三元组。
+ */
+function renderCardConsSection(act) {
+  const mode = CONS_MODES.includes(act.consMode) ? act.consMode : 'none';
+  const target = Number(act.consTarget) > 0 ? Number(act.consTarget) : 0;
+  const none = mode === 'none' || target === 0;
+  const req = consRequirementOf(act);
+  const active = consActiveState(act);
+  // 收起时只留一行摘要：模式 / 目标命座数 /（勾选了「按达到x命设置动作启用/停用」时才有最后这一段）
+  const summary = none
+    ? '无命座要求'
+    : `${mode === 'close' ? '达到命座关闭' : '达到命座开启'} · ${target} 命${active ? ' · 达到目标命座' : ''}`;
+  return `
+    <details class="det sub" data-details="${attr(act.id)}:cons" ${detailOpen(`${act.id}:cons`, false) ? 'open' : ''} style="margin:10px 0 0">
+      <summary>命座要求 <span class="hint prev">${esc(summary)}</span></summary>
+      <div class="card" style="background:var(--bg3);margin:8px 0 0;padding:8px 10px">
+        <div class="row mb">
+          <span class="hint" style="font-weight:600">命座要求</span>
+          <select data-kind="cons" data-id="${attr(act.id)}" data-field="mode" style="width:150px">
+            <option value="none" ${none ? 'selected' : ''}>无命座要求</option>
+            <option value="open" ${mode === 'open' && !none ? 'selected' : ''}>达到命座开启</option>
+            <option value="close" ${mode === 'close' && !none ? 'selected' : ''}>达到命座关闭</option>
+          </select>
+          <span class="hint">目标命座数</span>
+          <select data-kind="cons" data-id="${attr(act.id)}" data-field="target" style="width:110px" ${none ? 'disabled' : ''}>
+            ${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${target === n ? 'selected' : ''}>${n} 命</option>`).join('')}
+          </select>
+          ${none ? '' : `<label class="f"><input type="checkbox" data-kind="cons" data-id="${attr(act.id)}" data-field="enabled" ${active ? 'checked' : ''}> 按达到${target}命设置动作启用/停用</label>`}
+        </div>
+        <div class="hint" style="line-height:1.75">
+          · 勾选 = 在编辑器中<b>视作角色已达到 x 命</b>，不勾选 = 视作未达到 x 命；再结合「达到命座开启 / 达到命座关闭」决定 x 命及以上这条动作是启用还是停用。<br>
+          · 「达到命座开启」：视作达到 x 命时启用，视作未达到时停用；「达到命座关闭」：视作达到 x 命时停用，视作未达到时启用。<br>
+          · 上面说的“启用 / 停用”会写进 expression 的布尔值（<span class="pill">true</span> = 启用、<span class="pill">false</span> = 停用）；true/false 只是最终结果，不代表勾选状态本身。<br>
+          · 只有「无命座要求」时，写入动作节点的 expression 组成方式维持原样（<span class="pill">(基础触发条件) &amp;&amp; (队友条件)</span>）；
+          选了「达到命座开启 / 达到命座关闭」之后，组成方式变成 <span class="pill">((基础触发条件) &amp;&amp; (命座要求)) &amp;&amp; (队友条件)</span>（队友条件为空时省略后一段）。<br>
+          勾选的联动规则是「有高命必有低命，没有低命必没有高命」：勾选 x 命会连带勾上目标命座不高于 x 的其他动作，取消勾选 x 命会连带取消目标命座不低于 x 的其他动作。<br>
+          · 写进动作节点的字段是 <span class="pill">consRequirement</span> = <b>${req}</b>：<b>正负号</b>表示「达到命座开启 / 达到命座关闭」（绝对值 = 目标命座数），
+          「启用 / 停用」由 expression 里那个布尔值表达（${esc(consDescribe(act))}）。<br>
+          · 这个字段是给本编辑器保存命座要求用的自定义字段，
+          BetterGI 会像忽略 <span class="pill">tags</span> 一样忽略它；为 0（无命座要求）时导出会省略这个字段。<br>
+          · 同一个角色多个动作的命座要求可以在「策略信息 / 导入导出」→「当前文件状态」下的
+          <b>「快捷开关高命座手法」</b>里按角色一键设置。
+        </div>
+      </div>
+    </details>`;
+}
+
 function renderCardCondTabInner(act) {
   const auto = autoExcludeExpr(act, state.strategy.actions);
   const wrap = [teammateExpr(act, state.strategy.actions), auto ? `自动排除：${auto}` : ''].filter(Boolean);
@@ -910,10 +1104,10 @@ function renderCardCondTabInner(act) {
     ${renderCondEditor('cond', act.id, '', {
       text: act.conditionText,
       title: '基础动作触发条件 → 写入 condition.expression',
-      intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友条件已单独分离到「队友条件」区块，会自动与本区块内容取与）。',
+      intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友与命座条件已单独分离到「队友与命座条件」区块，会自动与本区块内容取与）。',
     })}
     <hr>
-    <div class="hint" style="margin-bottom:4px">与队友条件合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
+    <div class="hint" style="margin-bottom:4px">与队友条件、命座要求合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap" id="condFinal-${attr(act.id)}">${esc(finalExpr || '（空 = 恒真）')}</div>
     <div class="hint" style="margin-top:4px">队友条件片段：${wrap.length ? wrap.map(esc).join(' ; ') : '（无）'}</div>`;
 }
@@ -964,7 +1158,7 @@ function renderCardTeamTab(act) {
         <option value="or" ${opOf(field) === 'or' ? 'selected' : ''}>或 ||</option>
       </select></label>`;
   return `
-    <div class="hint" style="margin:8px 0 6px">这里选择的条件会应用到该动作节点<b>所有</b> expression（主条件与全部其他触发条件），与触发条件取与后生效。角色之间的运算符可以逐个修改，因此可以写“甲与乙或丙”这类组合；同一个角色也允许重复出现（多个角色组合里出现同一角色很正常）。</div>
+    <div class="hint" style="margin:8px 0 6px">这里选择的条件会应用到该动作节点<b>所有</b> expression（主条件与全部其他触发条件），与基础触发条件取与后生效。角色之间的运算符可以逐个修改，因此可以写“甲与乙或丙”这类组合；同一个角色也允许重复出现（多个角色组合里出现同一角色很正常）。</div>
 
     <div class="grid2">
       <label class="f">必要队友</label>
@@ -1016,6 +1210,7 @@ function renderCardTeamTab(act) {
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap">${esc(teammateExpr(act, state.strategy.actions) || '（无）')}</div>
     <div class="hint" style="margin-top:4px">排除队友：<span class="mono">${esc((tm.exclude || []).length ? excludeGroupTextOf(tm) : '（无，表达式里会写成 (true) 占位）')}</span></div>
     <div class="hint" style="margin-top:4px">自动排除生成：<span class="mono">${esc(autoExcludeExpr(act, state.strategy.actions) || '（无）')}</span></div>
+    ${renderCardConsSection(act)}
     <hr>
     <div class="hint">最终写入的 condition.expression：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap;margin-top:4px">${esc(buildExpression(act, state.strategy.actions) || '（空 = 恒真）')}</div>`;
@@ -1082,7 +1277,7 @@ function morePriForm(id, idx) {
       <span class="hint">${esc(scopeLabel(scope))}${calc ? (calc.empty ? '（该段当前没有动作，取段边界）' : '（段内有动作，按规则取边界值）') : ''}</span>
     </div>
     ${typeZero ? '<div class="hint">动作类型 0（战斗检查与标记）是一整段，不能再按元素/角色细分；它的段边界是 0~9999，priority 不会落到某个元素或角色上。</div>' : ''}
-    ${renderCondEditor('more', id, idx, { text: mp.text, title: `其他触发条件 #${idx + 1} 的触发条件` })}
+    ${renderCondEditor('more', id, idx, { text: mp.text, title: `其他触发条件 #${idx + 1} 的触发条件`, note: `其他触发条件 #${idx + 1} 的触发条件：这里用于写入不符合基础条件假定的条件，例如用于判断“低血量”或“需要前置动作已执行”的动作，配合上方判定顺序选择可实现优先或延后此条件判定的效果` })}
     <div class="hint" style="margin-top:6px">写入 morePriorities 的表达式：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap" id="moreExpr-${attr(id)}-${attr(idx)}">${esc((buildMorePriorities(state.strategy.actions.find(x => x.id === id), state.strategy.actions)[Number(idx)] || {}).expression || '（空 = 恒真）')}</div>
   </div>`;
@@ -1123,10 +1318,10 @@ function renderCardMoreTabInner(act) {
 
   return `
     <div class="hint" style="margin:8px 0 6px">其他触发条件 → 写入 morePriorities。同一个动作可以在不同情境下占据不同的优先级位置；这些条目彼此平级、独立，命中哪条就执行同一个动作，不会再去看基础触发条件。</div>
-    ${rows || '<div class="hint">还没有其他触发条件。常见用法：低血时把这个动作提到最前面；或者平时降低优先级让位给其他动作。</div>'}
+    ${rows || '<div class="hint">还没有其他触发条件。请将不符合基础条件假定的判定条件，例如“低血量”或“有前置辅助动作执行”的条件添加在这里，这样就能为这些情况设置不同的判定优先级，以实现类似于“低血时该动作优先执行”的效果</div>'}
     <details class="det sub" data-details="${attr(act.id)}:moreadd" ${detailOpen(`${act.id}:moreadd`, false) ? 'open' : ''}>
       <summary>添加其他触发条件</summary>
-      <div class="hint" style="margin-top:6px">先填触发条件（可以用「快捷添加条件」拼），再选择它相对哪一类动作“优先于 / 次于”，priority 会按规则自动算出。</div>
+      <div class="hint" style="margin-top:6px">先选择它相对哪一类动作“优先于 / 次于”，priority 会按规则自动算出；点下面的按钮把这条其他触发条件加进列表。</div>
       <div class="row mb" style="margin-top:6px" data-moreaddform="${attr(act.id)}">
         <span class="hint">判定顺序</span>
         <select data-na="cmp" style="width:100px">
@@ -1155,11 +1350,12 @@ function renderCardMoreTabInner(act) {
       <div class="hint mb">${sp
         ? `判定范围：<b>${esc(sp.label)}</b> → 取值区间 ${sp.before} ~ ${sp.hi}；当前将取 <b>${calc ? calc.priority : '-'}</b>${calc && calc.empty ? '（该段还没有动作，取段边界）' : ''}${typeZero ? '（动作类型 0 是一整段，不能按元素/角色细分）' : ''}`
         : '请选择动作类型。'}</div>
-      <div>${renderCondEditor('morenew', act.id, '', { title: '这条其他触发条件的触发条件' })}</div>
+      <div class="warnbox mb">请先点下面的按钮把这条其他触发条件加进列表，再在新增条目里的「编辑触发条件与优先级」里填写触发条件。</div>
       <div class="row" style="margin-top:6px">
-        <button class="mini primary" data-act="more-add2" data-id="${attr(act.id)}">+ 添加这条其他触发条件</button>
+        <button class="mini primary" data-act="more-add2" data-id="${attr(act.id)}">+ 添加其他触发条件（先点这里）</button>
       </div>
-    </details>`;
+    </details>
+  `;
 }
 
 /* ---------------- 注释（tags） ----------------
@@ -1251,19 +1447,9 @@ function renderActionsPanel() {
   bindMoreAddForm();
 }
 
-/** 读取“新增其他触发条件”表单里手写的触发条件（草稿存在 state.ui.newMoreText 里） */
-function readNewMoreText(a) {
-  const t = (state.ui.newMoreText || {})[a.id];
-  if (t !== undefined && t !== null) return String(t).trim();
-  const el = document.querySelector(`textarea[data-cond-ref="${cssEsc(refIdOf('morenew', a.id, ''))}"]`);
-  return el ? el.value.trim() : '';
-}
-
-/** 清空“新增其他触发条件”表单里手写的触发条件与片段状态 */
+/** 清空「新增其他触发条件」表单里残留的片段状态（表单里已经不再有触发条件输入框了） */
 function resetNewMoreText(a) {
   if (state.ui.newMoreText) delete state.ui.newMoreText[a.id];
-  const el = document.querySelector(`textarea[data-cond-ref="${cssEsc(refIdOf('morenew', a.id, ''))}"]`);
-  if (el) el.value = '';
   state.ui.condSnippet[refIdOf('morenew', a.id, '')] = { fn: '', vals: {}, pos: 'cursor', af: {}, cq: {} };
 }
 
@@ -1631,15 +1817,8 @@ const actionsHandlers = {
   'card-dup': (t) => {
     const a = state.strategy.actions.find(x => x.id === t.getAttribute('data-id'));
     if (!a) return;
-    const r = addAction(a.character, a.type, { name: '', action: a.action, ensureCast: a.ensureCast });
-    if (!r.ok) { alert(r.error); return; }
-    const na = r.action;
-    na.name = nextCopyName(a.name);
-    na.conditionText = a.conditionText;
-    na.tags = a.tags || '';
-    na.teammates = JSON.parse(JSON.stringify(a.teammates));
-    na.morePriorities = (a.morePriorities || []).map(mp => ({ ...mp, id: newId(), scope: { ...mp.scope } }));
-    refresh(['actions', 'preview']);
+    // 先选复制给哪个角色（本角色 / 其他角色，带搜索框），再复制
+    pickCopyTarget(a).then((r) => { if (r) duplicateActionTo(a, r.character); });
   },
   'card-del': (t) => {
     const id = t.getAttribute('data-id');
@@ -1813,13 +1992,10 @@ const actionsHandlers = {
     const scope = { type, element, character };
     const cmp = f.cmp === 'before' ? 'before' : 'after';
     const calc = computePriority(scope, cmp, state.strategy.actions);
-    const ref = refIdOf('morenew', a.id, '');
-    const st = condSnippetState(ref);
-    const text = st.fn ? buildCondSnippet(st.fn, (k) => (st.vals || {})[k]) : '';
-    const typed = readNewMoreText(a);
-    const finalText = typed || text;   // 手输优先，没有手输就用快捷添加拼出来的片段
+    // 新条目一律先建成空触发条件（空 = 恒真），触发条件等内容都到上面那条条目里改：
+    // 表单里不再有输入框，所以不存在「编了没保存」和「快捷插入把输入框清空」两个问题。
     a.morePriorities.push({
-      id: newId(), text: finalText, priority: calc ? calc.priority : 0,
+      id: newId(), text: '', priority: calc ? calc.priority : 0,
       cmp, scope, manualPriority: false,
     });
     resetNewMoreText(a);
@@ -1850,13 +2026,90 @@ const actionsHandlers = {
   '*': (t, e) => { /* 兜底 */ },
 };
 
+/** 复制动作时的备用名称：原名没被占用就直接用，占用了才在后面加数字（2、3…） */
 function nextCopyName(name) {
-  if (!name) return '';
+  const base = String(name || '').trim();
+  if (!base) return '';
   const names = new Set(state.strategy.actions.map(a => a.name));
-  let i = 2;
-  let n = `${name}-副本`;
-  while (names.has(n)) { n = `${name}-副本${i}`; i++; }
-  return n;
+  if (!names.has(base)) return base;
+  for (let i = 2; i < 1000; i++) {
+    const n = `${base}${i}`;
+    if (!names.has(n)) return n;
+  }
+  return `${base}${Date.now()}`;
+}
+
+/**
+ * 复制动作时改写「动作名称」里的角色名：
+ * 只认**标准名**（combat_avatar.json 里的名字），把它换成目标角色的标准名；
+ * 名称里出现的是昵称（「芙芙e」「奶奶开盾」）时不猜、原样保留。
+ */
+function renameForCharacter(name, from, to) {
+  const raw = String(name || '');
+  const src = from || '当前角色';
+  const dst = to || '当前角色';
+  if (src === dst) return raw;
+  if (!raw.includes(src)) return raw;
+  return raw.split(src).join(dst);
+}
+
+/** 复制目标角色弹窗（含搜索框）；返回 { character } 或 null（取消） */
+function pickCopyTarget(act) {
+  const curKey = act.character || '';
+  const curName = curKey || '当前角色';
+  const p = openModal({
+    title: '复制动作到',
+    body: `<div class="hint mb">把「${esc(act.name || '(未命名动作)')}」（${esc(curName)}，index ${act.index}）复制一份给哪个角色？</div>
+      <div class="hint mb">复制出来的动作除 index 按目标角色重新分配外，其它内容完全一致；动作名称里出现的角色标准名会改成目标角色的标准名（昵称不猜、原样保留）。</div>
+      <div class="rolelist" id="cpList" style="max-height:50vh"></div>`,
+    actions: [{ label: '取消', value: null }],
+  });
+  const renderList = (q) => {
+    const ql = String(q || '').trim().toLowerCase();
+    const rows = [];
+    for (const av of AVATARS) {
+      const isCur = (av.virtual ? '' : av.name) === curKey;
+      if (ql && !avatarHitAll(av, ql)) continue;
+      const mine = av.virtual ? act.character === '' : act.character === av.name;
+      rows.push(`<div class="roleitem">
+        ${elementDot(av.code)}<span class="nm">${esc(av.name)}${av.virtual ? ' <span class="dim">(character 留空)</span>' : ''}</span>
+        <span class="cnt">${av.virtual ? '编号 00' : avatarCodeLabel(av)} · ${actionsOf(state.strategy.actions, av.virtual ? '' : av.name).length} 条动作</span>
+        <button class="mini ${isCur ? '' : 'primary'}" data-cppick="${attr(av.virtual ? '' : av.name)}">${isCur ? '本角色（再复制一条）' : '复制给 TA'}</button>
+      </div>`);
+    }
+    $('cpList').innerHTML = rows.join('') || '<div class="empty">没有匹配的角色</div>';
+  };
+  const search = document.createElement('input');
+  search.id = 'cpSearch';
+  search.setAttribute('placeholder', '搜索角色名 / 编号');
+  search.style.width = '200px';
+  search.value = '';
+  search.oninput = () => renderList(search.value);
+  $('modalBody').insertBefore(search, $('cpList'));
+  $('cpList').onclick = (e) => {
+    const b = e.target.closest ? e.target.closest('[data-cppick]') : null;
+    if (!b) return;
+    closeModal({ character: b.getAttribute('data-cppick') || '' });
+  };
+  renderList('');
+  return p;
+}
+
+/** 把动作复制一份给指定角色（character 为空表示「当前角色」） */
+function duplicateActionTo(act, character) {
+  const target = character || '';
+  const r = addAction(target, act.type, { name: '', action: act.action, ensureCast: act.ensureCast });
+  if (!r.ok) { alert(r.error); return false; }
+  const na = r.action;
+  na.name = nextCopyName(renameForCharacter(act.name, act.character, target));
+  na.conditionText = act.conditionText;
+  na.tags = act.tags || '';
+  na.teammates = JSON.parse(JSON.stringify(act.teammates));
+  na.morePriorities = (act.morePriorities || []).map(mp => ({ ...mp, id: newId(), scope: { ...mp.scope } }));
+  state.ui.editingCharacter = target;
+  state.ui.collapsed[na.id] = false;
+  refresh(['actions', 'preview']);
+  return true;
 }
 
 function doSwap(id, dir) {
@@ -1909,9 +2162,53 @@ function editCondRow(t, sub) {
 
 /* ---------------- 字段处理 ---------------- */
 
+/**
+ * 把某个下拉回退成模型里的值（用于「改尾数 / 换类型被拒绝」之后）。
+ * 不回退的话，界面上还是那个没改成的值：
+ *   ① 用户看到的下拉和模型不一致；
+ *   ② 下一次「写回模型」会拿这个值再试一遍，同一条提示会弹两遍。
+ * 顺手把「上次渲染值 / 用户事件」两个基线也同步掉，否则它还会被当成一次新的用户改动。
+ */
+function revertFieldToModel(el, value) {
+  if (!el || !el.setAttribute) return;
+  const txt = value === undefined || value === null ? '' : String(value);
+  try { el.value = txt; } catch (e) { /* 某些类型不支持 */ }
+  try { el.setAttribute('data-rendered', txt); } catch (e) { /* 忽略 */ }
+  restampEditBaseline(el);
+}
+
 const actionsFieldHandlers = {
-  charlist: (i) => {
-    if (i.field === 'search') { state.ui.characterSearch = i.value; return true; }
+  cons: (i) => {
+    const a = state.strategy.actions.find(x => x.id === i.actionId);
+    if (!a) return false;
+    if (i.field === 'mode') {
+      const mode = CONS_MODES.includes(i.value) ? i.value : 'none';
+      if (mode === 'none') {
+        a.consMode = 'none'; a.consTarget = 0; a.consEnabled = false;
+      } else {
+        // 换模式时保持「这条动作在目标命座上来是启用还是停用」这个意图不变：
+        // 原来是「无命座要求」就按最自然的写法取值（达到命座开启 = 启用、达到命座关闭 = 停用）。
+        const wasReq = consHasRequirement(a);
+        const wasOn = !!a.consEnabled;     // 勾选状态（「按达到x命设置动作启用/停用」是否勾上）
+        a.consMode = mode;
+        if (!(Number(a.consTarget) > 0)) a.consTarget = 1;
+        a.consEnabled = wasReq ? wasOn : true;
+      }
+    } else if (i.field === 'target') {
+      const t = Number(i.value);
+      if (Number.isInteger(t) && t >= 1 && t <= CONS_MAX) a.consTarget = t;
+      if (a.consMode === 'none') a.consMode = 'open';
+    } else if (i.field === 'enabled') {
+      syncConsEnabled(a, !!i.value);
+    }
+    a.consRequirement = consRequirementOf(a);
+    // 命座要求直接参与 expression 的组成，必须重跑校验并刷新面板 / 预览 / 引用提示。
+    // 这里已经重建了面板，就不再返回 true —— 否则 onFieldChange 紧跟着还会再重建一次
+    // （同一次点击把整块面板换两遍，光标与选区白丢一次）。
+    refresh(['actions', 'preview']);
+    return false;
+  },
+  charlist: (i) => {    if (i.field === 'search') { state.ui.characterSearch = i.value; return true; }
     if (i.field === 'filterElement') { state.ui.filterElement = i.value; saveUi(); return true; }
     if (i.field === 'filterRarity') { state.ui.filterRarity = i.value; saveUi(); return true; }
     if (i.field === 'filterHasAction') { state.ui.filterHasAction = i.value; saveUi(); return true; }
@@ -1927,7 +2224,14 @@ const actionsFieldHandlers = {
         refreshLiveIssues();   // 动作名合法性/重名检查也实时显示在右侧校验面板
         return false;
       }
-      case 'ensureCast': a.ensureCast = !!i.value; return false;
+      case 'ensureCast': {
+        a.ensureCast = !!i.value;
+        // 「确保E技能释放成功」直接参与校验（勾了但没有 e 类指令会出警告、以及「按下没松开」等），
+        // 所以必须像改动作指令那样立刻重跑一次校验并刷新校验面板 / 头部徽标 / 卡片报错条：
+        // 只写模型不刷新的话，警告要等到重建面板（切页、重载草稿）才会出现或消失。
+        refreshLiveIssues();
+        return false;
+      }
       case 'tags': {
         a.tags = i.value;
         // 只就地把与注释有关的标记刷新掉，不重建面板（否则会打断输入法与光标）
@@ -1935,13 +2239,25 @@ const actionsFieldHandlers = {
         return false;
       }
       case 'type': {
+        const before = a.type;
         const r = changeActionType(a.id, Number(i.value));
-        if (!r.ok) { alert(r.error); return true; }
+        if (!r.ok) {
+          // 拒绝之后必须把界面回退成模型里的值：否则「重建面板前的写回」会拿这个没改成的值
+          // 再试一次，同一条提示就会弹两遍（而且用户看到的下拉会和模型不一致）。
+          revertFieldToModel(i.el, before);
+          alert(r.error);
+          return true;
+        }
         return 'refresh';
       }
       case 'slot': {
+        const before = a.slot;
         const r = moveActionToSlot(a.id, Number(i.value));
-        if (!r.ok) { alert(r.error); return true; }
+        if (!r.ok) {
+          revertFieldToModel(i.el, before);
+          alert(r.error);
+          return true;
+        }
         return 'refresh';
       }
       case 'action': {
@@ -1978,13 +2294,9 @@ const actionsFieldHandlers = {
     }
     return false;
   },
-  // 「添加其他触发条件」表单里的触发条件：草稿不写进模型，等点“添加”时才生成条目
-  morenewtext: (i) => {
-    if (!state.ui.newMoreText) state.ui.newMoreText = {};
-    state.ui.newMoreText[i.actionId] = i.value;
-    updateCondExplanation({ kind: 'morenew', id: i.actionId, idx: '', el: i.el });
-    return false;
-  },
+  // 「添加其他触发条件」表单里的触发条件输入框已移除（先添加条目、再在条目里编辑），
+  // 这里不再处理 morenewtext；保留分支是为了兼容旧草稿里可能残留的状态。
+  morenewtext: () => false,
   more: (i) => {
     const a = state.strategy.actions.find(x => x.id === i.actionId);
     const mp = a && a.morePriorities[Number(i.idx)];

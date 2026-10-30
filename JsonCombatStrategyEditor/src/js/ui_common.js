@@ -70,6 +70,29 @@ function avatarLabel(name) {
   return `${elementDot(av.code)}${esc(av.name)}`;
 }
 
+/* ---------------- 角色搜索 ----------------
+ * 角色表里每个角色还带一组「搜索用的其它写法」（数据来自 BetterGI 的 combat_avatar.json）。
+ * 它们**只**参与搜索框的匹配，不参与编号、不写进草稿与导出的 JSON、
+ * 也不会出现在页面上的任何位置（界面上一律只显示标准名，命中与否都不作提示）。
+ */
+
+/** 命中该角色的「搜索用的其它写法」 */
+function avatarExtraHit(av, ql) {
+  if (!av || !ql) return false;
+  const list = Array.isArray(av.alias) ? av.alias : [];
+  for (const t of list) if (String(t).toLowerCase().includes(ql)) return true;
+  return false;
+}
+
+/** 标准名 / id（+ 搜索用的其它写法）是否命中：角色列表、角色选择弹窗、复制弹窗共用 */
+function avatarHitAll(av, ql) {
+  if (!av) return false;
+  if (!ql) return true;
+  if (String(av.name || '').toLowerCase().includes(ql)) return true;
+  if (String(av.id || '').includes(ql)) return true;
+  return avatarExtraHit(av, ql);
+}
+
 /* ---------------- 角色选择器 ---------------- */
 
 /**
@@ -96,7 +119,7 @@ function pickAvatarsLive(opts) {
     let lastCode = null;
     for (const av of AVATARS) {
       if (av.virtual && !o.allowCurrent) continue;
-      if (q && !(av.name.toLowerCase().includes(q) || (av.id || '').includes(q))) continue;
+      if (q && !avatarHitAll(av, q)) continue;
       if (elFilter !== 'all' && String(av.code) !== String(elFilter)) continue;
       const r = rarityOf(av.name);
       if (rarFilter !== 'all') { if (rarFilter === 'none') { if (r) continue; } else if (r !== rarFilter) continue; }
@@ -186,6 +209,70 @@ function pickAvatarsLive(opts) {
   return p.then(v => (v === 'ok' ? { names: o.allowDuplicates ? sel.slice() : uniq(sel), mode: orMode ? 'or' : 'and' } : null));
 }
 
+/* ---------------- 角色搜索框（搜索词只用来筛选旁边的角色下拉） ----------------
+ * 「战斗前动作列表」每一行的角色选择框、以及条件函数里「动作/角色入参」的角色筛选，
+ * 都要一个「输入角色名 → 旁边的角色下拉只剩匹配的角色」的搜索框。
+ *
+ * 这里**只用原生 <select>**：搜索框自己不再挂任何候选列表
+ * （以前的 <input list="..."> + <datalist> 会在输入框正下方弹出候选层，
+ *   既不是需求要的那个「旁边的角色选择框」，又会跟面板重建抢焦点），
+ * 所以本文件里不再有任何 datalist / showPicker 相关的代码。
+ */
+
+/**
+ * 「动作参数」选择器里角色筛选下拉的「当前角色」哨兵值。
+ * 「当前角色」在动作模型里的 character 是空字符串，而 <option value=""> 已经是「（全部角色）」，
+ * 两者共用空值会让「当前角色」既选不中、又表现成“选了但筛选没生效”（下拉会跳回「全部角色」）。
+ * 所以筛选下拉的选项值用这个哨兵值表示「当前角色」；判断时由 cfFilterAllowsChar 负责把它翻译回模型里的空字符串。
+ */
+const CF_CHAR_CURRENT = '__current__';
+
+/** 角色候选显示名（角色名 + 编号；「当前角色」用「角色名(空)」的写法） */
+function avatarOptLabel(name) {
+  if (!name) return '当前角色';
+  const av = getAvatar(name);
+  return av ? `${av.name}（${avatarCodeLabel(av)}）` : `${name}（不在角色表）`;
+}
+
+/** 角色的显示名或编号是否命中搜索词（空角色 = 「当前角色」）；
+ *  标准名 / 编号的判断与以前完全一致，另外再匹配该角色的「搜索用的其它写法」 */
+function avatarMatchesQuery(character, ql) {
+  const hay = character || '当前角色';
+  if (hay.toLowerCase().includes(ql)) return true;
+  const av = character ? getAvatar(character) : null;
+  if (!av) return false;
+  if (String(av.seq).padStart(2, '0').includes(ql) || avatarCodeLabel(av).toLowerCase().includes(ql)) return true;
+  return avatarExtraHit(av, ql);
+}
+
+/**
+ * 角色下拉的选项：搜索词只过滤这里。
+ * **当前选中的角色项永远保留**（即使它不匹配搜索词，也带一个「已选」提示）——
+ * 否则筛完以后下拉里没有匹配 value 的 option，浏览器会把 select.value 变成空串，
+ * 一旦这时发生「把界面内容写回模型」，原本选中的角色就会被悄悄清成「（不指定角色）」。
+ */
+function avatarFilterOptions(query, selected, opts) {
+  const o = Object.assign({ allLabel: '全部角色', allValue: '', keepAll: true }, opts || {});
+  const ql = String(query === undefined || query === null ? '' : query).trim().toLowerCase();
+  const pool = o.pool || AVATARS.filter(a => !a.virtual);
+  const isSelected = (name) => String(selected || '') === String(name || '');
+  const hit = (name) => !ql || avatarMatchesQuery(name, ql);
+  const rows = o.keepAll ? [`<option value="${attr(o.allValue)}" ${!selected ? 'selected' : ''}>${esc(o.allLabel)}</option>`] : [];
+  const used = new Set(['']);
+  for (const av of pool) {
+    if (used.has(av.name)) continue;
+    if (!hit(av.name) && !isSelected(av.name)) continue;
+    used.add(av.name);
+    const mark = (ql && !hit(av.name)) ? '（已选）' : '';
+    rows.push(`<option value="${attr(av.name)}" ${isSelected(av.name) ? 'selected' : ''}>${esc(avatarOptLabel(av.name))}${mark}</option>`);
+  }
+  // 当前选中的角色不在角色池里（例如「当前角色」哨兵值）：额外补一项，保证选择不会丢
+  if (selected && !used.has(String(selected))) {
+    rows.push(`<option value="${attr(selected)}" selected>${esc(String(selected) === CF_CHAR_CURRENT ? '当前角色' : avatarOptLabel(String(selected)))}（已选）</option>`);
+  }
+  return rows.join('');
+}
+
 /* ---------------- 按键选择器 ---------------- */
 
 const KB_ROWS = [
@@ -262,7 +349,7 @@ function openRarityEditor() {
     let last = null;
     const rows = [];
     for (const av of AVATARS) {
-      if (q && !av.name.includes(q)) continue;
+      if (q && !(av.name.includes(q) || avatarExtraHit(av, q.toLowerCase()))) continue;
       if (av.code !== last) { rows.push(`<div class="secgroup">${av.code === 0 ? '元素未定/当前角色' : elementLabel(av.code)}</div>`); last = av.code; }
       const r = rarityOf(av.name);
       rows.push(`<div class="roleitem">

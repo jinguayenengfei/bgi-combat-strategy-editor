@@ -103,6 +103,7 @@ const COND_QUICK_FUNCS = [
   ['max', '取最大值', 'max'],
   ['combo-min-since', '多个动作中是否有至少一个动作的距上次执行时间小于', 'min(since(参数1),since(参数2),…) < 参数a'],
   ['combo-max-count', '多个动作中是否有至少一个动作执行超过指定次数', 'max(count(参数1,参数a,参数b),count(参数2,参数a,参数b),…) > 参数c'],
+  ['combo-max-ecd', '多个角色的 E 剩余冷却时间中是否有至少一个角色的剩余冷却时间超过', 'max(e-cd(参数1),e-cd(参数2),…) > 参数a'],
 ];
 
 // 能触发切人的指令（CombatCommand.Execute 中的判断）

@@ -469,6 +469,16 @@ function condExplainFunction(call, opts) {
   const num = (a, d) => (a && a.type === 'number' ? a.value : d);
   const argText = (a) => condToText(a);
   const refArg = (a) => (opts ? condRefHtml(a, opts) : condEsc(condRefText(a, opts)));
+  /**
+   * 参数释义：入参本身是「入参为动作的条件函数」（since / count / last-exec）时，
+   * 也要把它自己的动作参数渲染成动作名 —— min/max 会把这类函数整段套在里面的情况
+   * （min(since(43111), since(2))）就靠这里显示被引用的动作名，
+   * 否则只会原样打印 index 数字，看不出引用的是哪条动作。
+   * 找不到对应动作 / 没传 opts 时仍是原来的纯文本写法。
+   */
+  const explainArg = (a) => (a && a.type === 'call' && ['since', 'count', 'last-exec', 'e-cd'].includes(a.lower)
+    ? condExplainFunction(a, opts)
+    : argText(a));
 
   switch (fn.name) {
     case 't': return '开战至今的秒数';
@@ -510,8 +520,8 @@ function condExplainFunction(call, opts) {
     case 'low-hp': return '当前出战角色处于低血量';
     case 'onfield': return '本动作所属角色已经在场上';
     case 'in-party': return call.args.length === 0 ? '某个角色是否在队伍中（参数缺失）' : `角色「${call.args[0].name ? call.args[0].name : argText(call.args[0])}」在队伍中`;
-    case 'min': return `取最小值：${call.args.map(argText).join('、')}`;
-    case 'max': return `取最大值：${call.args.map(argText).join('、')}`;
+    case 'min': return `取最小值：${call.args.map(explainArg).join('、')}`;
+    case 'max': return `取最大值：${call.args.map(explainArg).join('、')}`;
     default: return fn.cn;
   }
 }
