@@ -12,6 +12,9 @@
   --e0:#9aa0a6; --e1:#8fe3ff; --e2:#ff7a52; --e3:#4cc2ff; --e4:#b98cff; --e5:#6fe0b8; --e6:#ffd166; --e7:#9ade4b;
 }
 *{box-sizing:border-box}
+/* hidden 属性必须压过 .row 等作者样式里的 display:flex，否则「时间值 / t-（时间值）」时
+   下面那行目标动作选择器仍然会显示出来（元素属性 hidden 的 UA 样式优先级低于作者样式）。 */
+[hidden]{display:none !important}
 html,body{margin:0;padding:0;height:100%}
 body{background:var(--bg);color:var(--fg);font:13px/1.6 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;}
 button,input,select,textarea{font-family:inherit;font-size:13px;color:var(--fg)}

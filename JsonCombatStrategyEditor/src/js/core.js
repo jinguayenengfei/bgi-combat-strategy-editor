@@ -29,17 +29,17 @@ function capacityOfType(type) { return Number(type) === 0 ? MAX_SLOT_TYPE0 : MAX
  * 界面上编辑的是「模式（达到命座开启 / 达到命座关闭）+ 目标命座数 + 按达到x命设置动作启用/停用」：
  *   · consMode   —— 'none' | 'open' | 'close'
  *   · consTarget —— 目标命座数 1~6（'none' 时是 0）
- *   · consEnabled—— 勾了「按达到x命设置动作启用/停用」之后，这条动作在**目标命座之上**是否启用
- *                   （true = 启用、false = 停用，也就是 expression 里那个布尔值）
+ *   · consEnabled—— 勾选框：勾上 = 在编辑器里**视作角色已达到 x 命**，不勾 = 视作未达到 x 命；
+ *                   再结合模式决定 x 命及以上这条动作是启用还是停用（true = 启用、false = 停用）。
  *
  * 三个信息分别落在两个地方，合起来是**一一对应**的，可以逐字还原：
  *   · consRequirement 的**符号** —— 「模式」（正 = 达到命座开启、负 = 达到命座关闭）、
  *     绝对值 —— 目标命座数；
- *   · expression 里那一段布尔字面量（wantConsValue → consExprText）—— 「启用 / 停用」；
- *   · 勾选状态 = （模式是「开启」）=== 那个布尔值（见 consEnabledFromExpr）。
- * 例：「达到命座关闭 + 3 命 + 勾选」= 3 命及以上停用 → consRequirement = -3、expression 片段是 false、
- * 勾选状态 true；「达到命座关闭 + 3 命 + 不勾选」= 3 命及以上仍然启用 → 也是 -3，但 expression 片段是 true、
- * 勾选状态 false。两种写法语义不同却共用同一个数值，靠 expression 里的布尔值区分。
+ *   · expression 里那一段布尔字面量（wantConsValue → consExprText）—— 「启用 / 停用」的结果；
+ *   · 勾选状态 = 视作角色达到目标命座（勾上 = 达到）。
+ * 例：「达到命座关闭 + 3 命 + 勾选」= 视作 3 命 → 3 命及以上停用 → consRequirement = -3、expression 片段是 false；
+ * 「达到命座关闭 + 3 命 + 不勾选」= 视作未达到 3 命 → 3 命以下仍然启用 → 也是 -3，但 expression 片段是 true。
+ * 两种写法语义不同却共用同一个数值，靠 expression 里的布尔值区分。
  */
 const CONS_MODES = ['none', 'open', 'close'];
 const CONS_MAX = 6;
@@ -51,8 +51,8 @@ function consHasRequirement(act) {
 /** 命座要求那一段的布尔值（true = 达到目标命座时这条动作被启用）；没有命座要求时返回 null */
 function wantConsValue(act) {
   if (!consHasRequirement(act)) return null;
-  // 「达到命座开启」+ 勾选 → true（x 命及以上执行）；
-  // 「达到命座关闭」+ 勾选 → false（x 命及以上不执行）；不勾选时各自相反。
+  // 勾选 = 视作达到 x 命：「达到命座开启 + 勾选」→ true（启用）；
+  // 「达到命座关闭 + 勾选」→ false（停用）；不勾选时各自相反。
   const on = (act.consMode === 'open') === !!act.consEnabled;
   if (typeof CONSWANT_DEBUG !== 'undefined' && CONSWANT_DEBUG) console.log('[wantConsValue]', act.name, act.consMode, act.consTarget, act.consEnabled, '->', on);
   return on;
@@ -164,8 +164,8 @@ function consTargetsFor(actions, character) {
 }
 
 /**
- * 把某角色「要达到几命」设置成 k（0 = 不启用任何高命手法）：
- * 目标命座不高于 k 的动作启用（勾选），高于 k 的停用（取消勾选）。
+ * 把某角色「视作达到几命」设置成 k（0 = 不启用任何高命手法）：
+ * 目标命座不高于 k 的动作勾选（视作达到），高于 k 的取消勾选（视作未达到）。
  */
 function applyConsLevel(actions, character, k) {
   const level = Number(k) || 0;
@@ -2780,6 +2780,7 @@ const state = {
     teamOps: {},            // 队友条件里夹在两个角色中间的运算符：'<actId>:<field>:<序号>' -> 'and' | 'or'
     teamFilterOps: {},      // 队友条件“新增角色前”运算符的选择：'<actId>:<field>' -> 'and' | 'or'
     team: [],               // 模拟队伍（最多 4 人）
+    previewCondMode: 'raw', // 优先级预览「动作触发条件」列：'raw' 原始表达式 / 'explain' 释义
     showIssues: true,
     convOpen: false,        // 校验面板「隐式转换检查（数值 ↔ 布尔）」是否展开
   },

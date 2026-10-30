@@ -55,6 +55,21 @@ const profilesPath = findProfileFile();
 const avatars = JSON.parse(fs.readFileSync(avatarJsonPath, 'utf8'));
 const cs = fs.readFileSync(profilesPath, 'utf8');
 
+// BetterGI 源码快照还没有、但确认会在下个版本实装的新角色：先手工预留在角色表里，
+// 方便提前编写包含该角色的战斗策略。等上游 combat_avatar.json 补上同名角色后，
+// 这里的条目会自动跳过（不会重复），再按上游顺序重新编号即可。
+const EXTRA_AVATARS = [
+  {
+    after: '瓦列里',
+    entry: { id: '10000136', name: '米提亚', nameEn: 'Mitya', alias: ['米提亚', 'Mitya', '米神', '天才小子'] },
+  },
+];
+for (const ex of EXTRA_AVATARS) {
+  if (avatars.some(a => a.name === ex.entry.name)) continue;
+  const i = avatars.findIndex(a => a.name === ex.after);
+  avatars.splice(i < 0 ? avatars.length : i + 1, 0, ex.entry);
+}
+
 /**
  * combat_avatar.json 里每个角色的 alias（该角色在玩家口中的其它写法）。
  * 只用于网页搜索框的匹配，不参与编号、不写进导出 JSON、也不显示。
@@ -108,6 +123,7 @@ const ELEMENT_FALLBACK = {
   '沃雅妮莎': '水元素',   // 依据战斗数据里的别名推定
   '薇斯纳': '风元素',     // 依据战斗数据里的别名推定
   '瓦列里': '雷元素',     // 该角色尚未实装（BetterGI 超前填充的词条），按游戏里已有内容推测为雷元素
+  '米提亚': '雷元素',     // 同上；BetterGI 源码快照尚未收录，由 EXTRA_AVATARS 提前预留
 };
 
 const result = [];
@@ -185,13 +201,13 @@ lines.push('');
 lines.push('const ACTION_TYPES = [');
 lines.push("  { code: 0, name: '战斗检查与标记', short: '检查与标记', cn: '仅为独立的战斗结束检测循环和不指定角色的标记动作预留的位置，可在“当前角色”下新增动作时选择' },");
 lines.push("  { code: 1, name: '开盾', short: '开盾', cn: '开启护盾的技能当然是最优先的，并且要保证释放成功，护盾提供的是至关重要的抗打断能力和生存能力' },");
-lines.push("  { code: 2, name: '先手或挂元素', short: '先手', cn: '需要在开始爆发前一定时间释放的技能，和持续时间比较长的挂先手元素技能' },");
+lines.push("  { code: 2, name: '先手', short: '先手', cn: '需要在开始爆发前一定时间释放的技能，和持续时间比较长的挂先手元素技能' },");
 lines.push("  { code: 3, name: '后台输出', short: '后台', cn: '可以在后台持续造成较多伤害的技能，有这种技能的一般被认为是后台副C' },");
 lines.push("  { code: 4, name: '辅助', short: '辅助', cn: '持续时间或次数有限的，具备减抗和增伤等效果的辅助技能，用于增加后续爆发伤害' },");
 lines.push("  { code: 5, name: '爆发', short: '爆发', cn: '能在短时间内造成大量伤害的输出技能，可以挂额外优先级条目在关键辅助技能释放后优先执行' },");
 lines.push("  { code: 6, name: '前台长轴输出', short: '前台', cn: '需要较长时间才能完全释放大量伤害的动作组，可以利用额外优先级条目在必要前置动作后一定时间内循环执行' },");
-lines.push("  { code: 7, name: '回血或低收益技能', short: '回血', cn: '包括回血技能在内的，伤害较低的技能，请绝对不要忘记挂额外优先级条目在低血量下优先执行回血技能' },");
-lines.push("  { code: 8, name: '纯挂元素普攻', short: '挂普攻', cn: '字面意思，若没有其他动作可以执行，用普攻挂点元素与后台技能发生反应，并提供充能' },");
+lines.push("  { code: 7, name: '回血或低收益技能', short: '低收益', cn: '包括回血技能在内的，伤害较低的技能，请绝对不要忘记挂额外优先级条目在低血量下优先执行回血技能' },");
+lines.push("  { code: 8, name: '纯挂元素普攻', short: '元素普攻', cn: '字面意思，若没有其他动作可以执行，用普攻挂点元素与后台技能发生反应，并提供充能' },");
 lines.push("  { code: 9, name: '兜底普攻/等待', short: '兜底', cn: '实在没有其他动作可以执行了，那就只能来点物理攻击了，或者至少得在日志里输出点什么' },");
 lines.push('];');
 lines.push('');

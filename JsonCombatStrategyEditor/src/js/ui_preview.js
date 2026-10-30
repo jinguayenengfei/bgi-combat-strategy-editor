@@ -5,15 +5,23 @@ function renderPreviewPanel() {
   const teamFull = team.length === 4;
   const list = expandPriorities(state.strategy.actions, teamFull ? team : null);
   const dropped = state.strategy.actions.filter(a => a.character && teamFull && !team.includes(a.character));
+  const condMode = state.ui.previewCondMode === 'explain' ? 'explain' : 'raw';
 
   const priClass = (p) => (p < 10000 ? 'hi' : p < 50000 ? 'mid' : 'low');
 
-  // 「动作触发条件」列显示原始 expression 文本；只给「入参为动作的条件函数」（since / count / last-exec）
-  // 的动作参数套一层悬停提示（提示该动作的 index 与动作名），显示出来的正文仍是原文。
+  // 「动作触发条件」列：
+  //   raw     —— 原始 expression 文本（只给 since / count / last-exec 的动作参数套悬停提示，正文仍是原文）；
+  //   explain —— 与动作卡片「基础触发条件」下的「释义」同一套渲染：动作引用显示成动作名称并带 index / 指令的悬停提示。
+  // 两种模式都解释表里那一行的完整 expression（含队友条件、命座要求），保证与列里显示的内容一一对应。
   const condHtml = (e) => {
     const text = e.expression || '';
     if (!text) return esc('（空 = 恒真）');
-    return condRawExprHtml(text, condExplainCtx(e.action ? e.action.id : ''));
+    const ctx = condExplainCtx(e.action ? e.action.id : '');
+    if (condMode !== 'explain') return condRawExprHtml(text, ctx);
+    const parsed = condParse(text, allActionNames(state.strategy.actions));
+    if (parsed.error) return `<span style="color:var(--err)">${esc(parsed.error)}</span>`;
+    if (!parsed.ast) return esc('（空 = 恒真）');
+    return condExplain(parsed.ast, ctx);
   };
 
   const rows = list.map((e, i) => `<tr>
@@ -44,6 +52,12 @@ function renderPreviewPanel() {
 
     <div class="card">
       <h3>优先级排序预览 <span class="hint">共 ${list.length} 个条目（每个动作 = 1 个主条目 + N 个其他触发条件条目）</span></h3>
+      <div class="row mb">
+        <span class="hint">「动作触发条件」列显示：</span>
+        <button type="button" class="chip ${condMode === 'raw' ? 'on' : ''}" data-act="preview-cond-mode" data-mode="raw">原始表达式</button>
+        <button type="button" class="chip ${condMode === 'explain' ? 'on' : ''}" data-act="preview-cond-mode" data-mode="explain">释义</button>
+        <span class="hint">释义与「动作编辑」里「基础触发条件」下的释义相同；鼠标移到动作名上可查看 index 与动作指令。</span>
+      </div>
       <div class="row mb">
         <span class="hint">按 priority 从小到大排序；同 priority 时按动作在策略中的声明顺序（主条目在前、额外条件按顺序）。</span>
       </div>
@@ -219,6 +233,13 @@ function loadTeamDialog() {
 /* ---------------- 事件 ---------------- */
 
 const previewHandlers = {
+  'preview-cond-mode': (t) => {
+    const mode = t.getAttribute('data-mode') === 'explain' ? 'explain' : 'raw';
+    if (state.ui.previewCondMode === mode) return;
+    state.ui.previewCondMode = mode;
+    saveUi();
+    refresh(['preview']);
+  },
   'team-edit': () => {
     pickAvatarsLive({
       title: '模拟队伍（选 4 名角色）',

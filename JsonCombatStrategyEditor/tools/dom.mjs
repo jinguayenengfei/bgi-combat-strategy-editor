@@ -39,6 +39,9 @@ export function createDom() {
       detached.push(this);
       allElements.push(this);
     }
+    /** 与浏览器一致的 hidden 反射属性：编辑器靠 row.hidden = ... 切换时间入参那一行 */
+    get hidden() { return this.hasAttribute('hidden'); }
+    set hidden(v) { if (v) this.setAttribute('hidden', ''); else this.removeAttribute('hidden'); }
     getAttribute(n) { return this._attrs.has(n) ? this._attrs.get(n) : null; }
     setAttribute(n, v) {
       this._attrs.set(n, String(v));

@@ -11,6 +11,8 @@ const html = fs.readFileSync(path.join(root, OUT_NAME), 'utf8');
 const m = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) throw new Error('单文件 HTML 里找不到内联 <script>');
 if (html.includes('<!--__BUNDLE__-->')) throw new Error('单文件 HTML 里的占位注释没有被替换');
+// 「时间值 / t-（时间值）」时目标动作那一行靠 hidden 隐藏；hidden 必须压过 .row{display:flex}
+if (!html.includes('[hidden]{display:none !important}')) throw new Error('单文件 HTML 缺少 [hidden] 的强制隐藏样式');
 
 const dom = createDom();
 const ctx = {
@@ -87,6 +89,23 @@ if (g('buildExpression')(g('state').strategy.actions[0], g('state').strategy.act
   plain.slot = 1; g('recomputeIndexes')([plain]);
   g('state').strategy.actions = [plain];
   if ('consRequirement' in g('buildJson')().actions[0]) throw new Error('单文件 HTML 无命座要求时不该写 consRequirement');
+  // 米提亚词条 / 动作类型简写
+  const mitya = g('getAvatar')('米提亚');
+  if (!mitya || mitya.code !== 4 || mitya.seq !== 21 || g('avatarCodeLabel')(mitya) !== '421') throw new Error('单文件 HTML 的米提亚词条不对：' + JSON.stringify(mitya));
+  const t2 = g('ACTION_TYPES').find(t => t.code === 2);
+  const t7 = g('ACTION_TYPES').find(t => t.code === 7);
+  const t8 = g('ACTION_TYPES').find(t => t.code === 8);
+  if (t2.name !== '先手' || t7.short !== '低收益' || t8.short !== '元素普攻') throw new Error('单文件 HTML 的动作类型名称/简写不对');
+  // count 只指定目标动作时不带两个空逗号；指定时间时保留逗号
+  const cntSnippets = (vals) => g('buildCondSnippet')('count', k => vals[k]);
+  if (cntSnippets({ a: '43111' }) !== 'count(43111)') throw new Error('单文件 HTML 的 count 快捷插入多了逗号：' + cntSnippets({ a: '43111' }));
+  if (cntSnippets({ a: '43111', bNum: '2' }) !== 'count(43111,2,)') throw new Error('单文件 HTML 的 count 起始时间逗号丢了：' + cntSnippets({ a: '43111', bNum: '2' }));
+  if (cntSnippets({ a: '43111', cNum: '3' }) !== 'count(43111,,3)') throw new Error('单文件 HTML 的 count 结束时间逗号丢了：' + cntSnippets({ a: '43111', cNum: '3' }));
+  const comboCount = g('buildCondSnippet')('combo-max-count', k => ({ n: '2', arg1: '43111', arg2: '53111', cmp: '>', num: '2' }[k]));
+  if (comboCount !== 'max(count(43111),count(53111)) > 2') throw new Error('单文件 HTML 的组合 count 多出了逗号：' + comboCount);
+  // 新增的组合函数 max(e-cd(角色1),e-cd(角色2),…) > 参数a
+  const ecdSnippet = g('buildCondSnippet')('combo-max-ecd', k => ({ n: '2', arg1: '枫原万叶', arg2: '芙宁娜', cmp: '>', num: '2' }[k]));
+  if (ecdSnippet !== 'max(e-cd(枫原万叶),e-cd(芙宁娜)) > 2') throw new Error('单文件 HTML 的 E 冷却组合函数片段不对：' + ecdSnippet);
   // 「新建（含兜底动作）」预设的 3 条动作
   g('newStrategy')('preset');
   const names = g('state').strategy.actions.map(x => x.name);
@@ -94,13 +113,13 @@ if (g('buildExpression')(g('state').strategy.actions[0], g('state').strategy.act
     throw new Error('单文件 HTML 的「新建（含兜底动作）」预设不对：' + JSON.stringify(names));
   }
   const chk = g('state').strategy.actions[0];
-  if (chk.action !== 'check,scroll(10)' || chk.conditionText !== 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )') throw new Error('单文件 HTML 的兜底战斗检查内容不对');
+  if (chk.action !== 'check' || chk.conditionText !== 't > 10 && last-check > 4 && (! (last-check > t - 9) || count < 1)') throw new Error('单文件 HTML 的兜底战斗检查内容不对');
   const mk = g('state').strategy.actions[1];
   if (mk.action !== '' || mk.conditionText !== 'low-hp && since > 4') throw new Error('单文件 HTML 的角色红血标记内容不对');
   if (g('validateStrategy')().errors.length) throw new Error('单文件 HTML 的预设策略不该有错误');
 }
 
-/* ---- 本轮新增：命座要求四种组合的逐字往返 / 触发条件不多括号 / 命座要求折叠 / 搜索框 ---- */
+/* ---- 本轮新增：命座要求「模式 / 勾选」的逐字往返 / 触发条件不多括号 / 命座要求折叠 / 搜索框 ---- */
 {
   // ① 四种「模式 + 勾选」组合：consRequirement 的符号表模式、expression 里的布尔值表启用/停用
   const combos = [['open', 3, true], ['open', 3, false], ['close', 3, true], ['close', 3, false]];

@@ -552,7 +552,7 @@ function renderInfoPanel() {
             <button class="mini" data-act="cons-switch">快捷开关高命座手法</button>
             <span class="hint">${(() => {
               const chs = consCharacters(s.actions);
-              return chs.length ? `可切换的角色：${chs.map(c => esc(c || '当前角色')).join('、')}` : '还没有动作设置「达到命座开启 / 达到命座关闭」，在动作卡片的「触发条件」→「命座要求」里设置';
+              return chs.length ? `可切换的角色：${chs.map(c => esc(c || '当前角色')).join('、')}` : '还没有动作设置「达到命座开启 / 达到命座关闭」，在动作卡片的「队友与命座条件」→「命座要求」里设置';
             })()}</span>
           </div>
         </div>
@@ -582,8 +582,10 @@ function renderInfoPanel() {
 /* ---------------- 快捷开关高命座手法 ----------------
  * 列表里展示「有动作设置了达到命座开启 / 达到命座关闭」的每一个角色，
  * 以及该角色可切换动作开关的相关命座；同一个角色有多个可切换命座时就分成几条 chip 放在一起。
- * 点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座 ≤ x 的动作启用、> x 的停用
- * （也就是「有高命必有低命，没有低命必没有高命」），点「不启用高命手法」则把该角色全部停用。
+ * 点某个命座就等于「这个角色在编辑器中按 x 命来设置动作开关」：
+ * 目标命座 ≤ x 的动作勾选（视作达到），> x 的取消勾选（视作未达到）；
+ * 再结合每个动作自己的「达到命座开启 / 达到命座关闭」模式决定实际启用 / 停用
+ * （也就是「有高命必有低命，没有低命必没有高命」），点「不启用高命手法」则把该角色全部取消勾选。
  */
 
 /** 某角色当前生效的命座（= 已勾选目标命座里最大的那个；0 表示没有启用任何高命手法） */
@@ -604,7 +606,7 @@ function openConsSwitchModal() {
     openModal({
       title: '快捷开关高命座手法',
       body: `<div class="warnbox">目前没有任何动作设置了「达到命座开启 / 达到命座关闭」。</div>
-        <div class="hint" style="margin-top:6px">请在「动作编辑」页的动作卡片里展开「触发条件」区块，在其中的「命座要求」里选择模式与目标命座数、并按需要勾选「按达到x命设置动作启用/停用」。</div>`,
+        <div class="hint" style="margin-top:6px">请在「动作编辑」页的动作卡片里展开「队友与命座条件」区块，在其中的「命座要求」里选择模式与目标命座数、并按需要勾选「按达到x命设置动作启用/停用」。</div>`,
       actions: [{ label: '知道了', primary: true, value: null }],
     });
     return;
@@ -626,7 +628,7 @@ function openConsSwitchModal() {
           <button class="chip ${level === 0 ? 'on' : ''}" data-cons-set="${i}" data-cons-level="0">不启用高命手法</button>
           ${[1, 2, 3, 4, 5, 6].map(x => `<button class="chip ${level === x ? 'on' : ''}" data-cons-set="${i}" data-cons-level="${x}">${x} 命</button>`).join('')}
         </div>
-        <div class="hint" style="margin-top:4px">点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座不高于 x 的动作启用、高于 x 的停用（有高命必有低命，没有低命必没有高命）。</div>
+        <div class="hint" style="margin-top:4px">点某个命座就等于「这个角色在编辑器中按 x 命来设置动作开关」：目标命座不高于 x 的动作勾选（视作达到）、高于 x 的取消勾选；再结合各动作的开启 / 关闭模式决定实际启用 / 停用（有高命必有低命，没有低命必没有高命）。</div>
       </div>`;
     }).join('');
     return `<div class="hint mb">这里只列出有动作设置了「达到命座开启 / 达到命座关闭」的角色。设置完之后，动作卡片里「命座要求」下「按达到x命设置动作启用/停用」的勾选状态会同步变化，导出时写进各动作的 <span class="pill">consRequirement</span> 字段与 expression。</div>

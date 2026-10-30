@@ -476,7 +476,7 @@ function condExplainFunction(call, opts) {
    * 否则只会原样打印 index 数字，看不出引用的是哪条动作。
    * 找不到对应动作 / 没传 opts 时仍是原来的纯文本写法。
    */
-  const explainArg = (a) => (a && a.type === 'call' && ['since', 'count', 'last-exec'].includes(a.lower)
+  const explainArg = (a) => (a && a.type === 'call' && ['since', 'count', 'last-exec', 'e-cd'].includes(a.lower)
     ? condExplainFunction(a, opts)
     : argText(a));
 

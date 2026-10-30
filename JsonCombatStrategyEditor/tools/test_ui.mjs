@@ -811,6 +811,64 @@ check('回归④：快捷添加条件的比较选项 / 动作与角色选择器 
   num5.dispatch('input');
   cfbox().querySelector('[data-cf="insend"]').dispatch('click');
   if (a.conditionText !== 'max(count(,0.5,3),count(,0.5,3)) > 2') throw new Error('组合 2 插入结果不对：' + a.conditionText);
+  // 组合 2 里每项 count 只选目标动作、两个时间都留空时，同样不应多出两个逗号
+  a.conditionText = '';
+  g('renderActionsPanel')();
+  pickFn('combo-max-count');
+  const nKeep = cfbox().querySelector('[data-cfp="n"]');
+  nKeep.value = '1';
+  nKeep.dispatch('change');
+  const argKeep = cfbox().querySelector('[data-cfp="arg1"]');
+  argKeep.value = String(a.index);
+  argKeep.dispatch('change');
+  cfbox().querySelector('[data-cf="insend"]').dispatch('click');
+  if (a.conditionText !== `max(count(${a.index}))`) throw new Error('组合 2 里 count 多出了逗号：' + a.conditionText);
+  // count 只指定目标动作、两个时间都留空 → count(动作)，不再多出两个空逗号
+  a.conditionText = '';
+  g('renderActionsPanel')();
+  pickFn('count');
+  const cntAct = cfbox().querySelector('[data-cfp="a"]');
+  cntAct.value = String(a.index);
+  cntAct.dispatch('change');
+  const cntSnip = () => cfbox().querySelector('[data-cfsnip]').textContent;
+  if (cntSnip() !== `count(${a.index})`) throw new Error('只选目标动作时不应多出两个逗号：' + cntSnip());
+  // 指定开始或结束时间时，两个逗号必须保留（第二个/第三个参数的位置要靠逗号确认）
+  const cntB = cfbox().querySelector('[data-cfp="bNum"]');
+  cntB.value = '2';
+  cntB.dispatch('input');
+  if (cntSnip() !== `count(${a.index},2,)`) throw new Error('只填开始时间时应保留两个逗号：' + cntSnip());
+  cntB.value = '';
+  cntB.dispatch('input');
+  const cntC = cfbox().querySelector('[data-cfp="cNum"]');
+  cntC.value = '3';
+  cntC.dispatch('input');
+  if (cntSnip() !== `count(${a.index},,3)`) throw new Error('只填结束时间时应保留两个逗号：' + cntSnip());
+  cntC.value = '';
+  cntC.dispatch('input');
+  if (cntSnip() !== `count(${a.index})`) throw new Error('清空时间后应恢复成 count(动作)：' + cntSnip());
+  cfbox().querySelector('[data-cf="insend"]').dispatch('click');
+  if (a.conditionText !== `count(${a.index})`) throw new Error('count(动作) 插入结果不对：' + a.conditionText);
+  // 组合 3：max(e-cd(角色1),e-cd(角色2),…) > 数值
+  a.conditionText = '';
+  g('renderActionsPanel')();
+  pickFn('combo-max-ecd');
+  const box6 = cfbox();
+  const n6 = box6.querySelector('[data-cfp="n"]');
+  if (!n6 || n6.children.length !== 9) throw new Error('组合 3 的项数应为 1~9，实际 ' + (n6 && n6.children.length));
+  const ecd1 = box6.querySelector('[data-cfp="arg1"]');
+  const ecd2 = box6.querySelector('[data-cfp="arg2"]');
+  if (!ecd1 || !ecd2) throw new Error('组合 3 缺少逐项角色选择');
+  if (!box6.querySelector('[data-cfp="cmp"]') || !box6.querySelector('[data-cfp="num"]')) throw new Error('组合 3 缺少共用的比较项');
+  ecd1.value = '枫原万叶';
+  ecd1.dispatch('change');
+  const ecd2b = cfbox().querySelector('[data-cfp="arg2"]');
+  ecd2b.value = '芙宁娜';
+  ecd2b.dispatch('change');
+  const num6 = cfbox().querySelector('[data-cfp="num"]');
+  num6.value = '2';
+  num6.dispatch('input');
+  cfbox().querySelector('[data-cf="insend"]').dispatch('click');
+  if (a.conditionText !== 'max(e-cd(枫原万叶),e-cd(芙宁娜)) > 2') throw new Error('组合 3 插入结果不对：' + a.conditionText);
   // 括号运算符
   a.conditionText = '';
   g('renderActionsPanel')();
@@ -1553,6 +1611,28 @@ check('本次⑤：预览页「动作触发条件」列保留原文，动作入�
   return titles.join('；');
 });
 
+check('本次⑤b：预览列可在「原始表达式 / 释义」之间切换，释义含动作名与悬停提示', () => {
+  g('state').strategy.actions = [];
+  const a1 = makeAction('', 9, { name: '等待', action: 'wait(0.2)' });
+  const a2 = makeAction('', 8, { name: '普攻', action: 'attack' });
+  a2.conditionText = `since(${a1.index}) > 2`;
+  g('renderPreviewPanel')();
+  const rawHtml = $('panePreview').innerHTML;
+  const stripAref = (h) => String(h).replace(/<span class="aref"[^>]*>/g, '').replace(/<\/span>/g, '').replace(/&gt;/g, '>');
+  if (!stripAref(rawHtml).includes(`since(${a1.index})`)) throw new Error('默认应显示原始表达式：' + rawHtml.slice(0, 200));
+  const modeBtn = (m) => dom.document.querySelector(`[data-act="preview-cond-mode"][data-mode="${m}"]`);
+  if (!modeBtn('raw') || !modeBtn('explain')) throw new Error('缺少原始表达式 / 释义切换按钮');
+  modeBtn('explain').dispatch('click');
+  const exHtml = $('panePreview').innerHTML;
+  if (!exHtml.includes('距上次执行的秒数')) throw new Error('切换释义后没有显示解释文本');
+  if (!exHtml.includes('动作「等待」')) throw new Error('释义里没有把引用的动作显示成动作名');
+  if (!exHtml.includes(`title="index=${a1.index}`)) throw new Error('释义里的动作名缺少 index 悬停提示');
+  if (g('state').ui.previewCondMode !== 'explain') throw new Error('预览列的显示方式没有写进 UI 状态');
+  modeBtn('raw').dispatch('click');
+  if (!stripAref($('panePreview').innerHTML).includes(`since(${a1.index})`)) throw new Error('切回原始表达式失败');
+  return '原始表达式 ↔ 释义；动作名与悬停提示一致';
+});
+
 /* ---------------- 本次 3~5：展开项预览 / 引用注释 / 预览悬停提示 ---------------- */
 
 check('本次③新：动作卡片的「动作指令」「队友条件」展开项旁也有语句预览（与「触发条件」一致）', () => {
@@ -1996,9 +2076,12 @@ check('④ count 的两个时间入参：时间值 / t-（时间值）/ t-since(
   if (snip() !== 'count(,t,t-2)') throw new Error('数值留空时应只写 t：' + snip());  // 模式切换只切换显示，不重建参数面板（输入框还是同一个节点）
   const numEl = cfbox().querySelector('[data-cfp="bNum"]');
   if (numEl.hidden) throw new Error('切到 t-（时间值）时数值框应可见');
+  const targetRow = () => cfbox().querySelector('[data-cftime="b"]');
+  if (!targetRow() || !targetRow().hidden) throw new Error('（时间值）/ t-（时间值）时不该显示目标动作选择行');
   // ③ t-since(动作)：目标动作按 index 填进 since
   bm.value = 'tsi'; bm.dispatch('change');
   if (!cfbox().querySelector('[data-cfp="bNum"]').hidden) throw new Error('切到 t-since 时数值框应隐藏');
+  if (!targetRow() || targetRow().hidden) throw new Error('切到 t-since 时应显示目标动作选择行');
   const sinceBox = cfbox().querySelector('[data-cfp="bSince"]');
   if (!sinceBox) throw new Error('t-since 缺少目标动作选择器');
   const search = cfbox().querySelector('[data-cfcharq="bSince"]');
@@ -2142,9 +2225,9 @@ check('⑦ 卡片标题旁显示动作指令串 + 复制给指定角色（弹窗
   cmdTa.value = 'e,wait(0.3)';
   cmdTa.dispatch('input');
   if (sum().textContent !== 'e,wait(0.3)') throw new Error('指令串预览没有实时刷新：' + sum().textContent);
-  // 「」触发条件」区块标题旁仍然是条件表达式
-  if (!dom.document.getElementById('paneActions').innerHTML.includes('触发条件 <span class="hint prev">low-hp')) {
-    throw new Error('「触发条件」区块标题旁的预览不该被改动');
+  // 「」基础触发条件」区块标题旁仍然是条件表达式
+  if (!dom.document.getElementById('paneActions').innerHTML.includes('基础触发条件 <span class="hint prev">low-hp')) {
+    throw new Error('「基础触发条件」区块标题旁的预览不该被改动');
   }
   // 复制按钮 → 弹窗（真正复制是异步的，放在文件末尾的异步检查里）
   g('app').handlers['card-dup']({ getAttribute: () => a.id }, {});
@@ -2527,8 +2610,8 @@ check('D②：「新建（含兜底动作）」预置 3 条动作（兜底战斗
   const idxOrder = list.map(a => a.index);
   if (!(idxOrder[0] < idxOrder[1] && idxOrder[1] < idxOrder[2])) throw new Error('动作顺序应为 兜底战斗检查 → 角色红血标记 → 等待：' + idxOrder.join(','));
   if (chk.type !== 0 || chk.character !== '') throw new Error('兜底战斗检查应为「当前角色 + 类型 0」');
-  if (chk.action !== 'check,scroll(10)') throw new Error('兜底战斗检查的指令不对：' + chk.action);
-  if (chk.conditionText !== 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )') throw new Error('兜底战斗检查的条件不对：' + chk.conditionText);
+  if (chk.action !== 'check') throw new Error('兜底战斗检查的指令不对：' + chk.action);
+  if (chk.conditionText !== 't > 10 && last-check > 4 && (! (last-check > t - 9) || count < 1)') throw new Error('兜底战斗检查的条件不对：' + chk.conditionText);
   if ((chk.morePriorities || []).length || chk.tags) throw new Error('兜底战斗检查不该有其他触发条件或注释');
   if (mark.type !== 0 || mark.character !== '') throw new Error('角色红血标记应为「当前角色 + 类型 0」');
   if (mark.action !== '') throw new Error('角色红血标记不该有指令：' + mark.action);
@@ -2546,6 +2629,47 @@ check('D②：「新建（含兜底动作）」预置 3 条动作（兜底战斗
   g('newStrategy')('blank');
   if (g('state').strategy.actions.length !== 0) throw new Error('空白策略不该有动作');
   return list.map(a => `${a.name}(${a.index})`).join(' → ');
+});
+
+check('D②b：命座要求移到「队友与命座条件」下，勾选框与说明文字已修正', () => {
+  g('state').strategy.actions = [];
+  g('state').ui.editingCharacter = '芙宁娜';
+  const a = makeAction('芙宁娜', 4, { name: '芙芙e', action: 'e' });
+  a.consMode = 'open'; a.consTarget = 3; a.consEnabled = true;
+  g('state').ui.collapsed[a.id] = false;
+  g('state').ui.detailsOpen[`${a.id}:cond`] = true;
+  g('state').ui.detailsOpen[`${a.id}:team`] = true;
+  g('state').ui.detailsOpen[`${a.id}:cons`] = true;
+  g('renderActionsPanel')();
+  const html = $('paneActions').innerHTML;
+  if (!html.includes('基础触发条件')) throw new Error('「触发条件」应改名为「基础触发条件」');
+  if (!html.includes('队友与命座条件')) throw new Error('「队友条件」应改名为「队友与命座条件」');
+  const at = (key) => html.indexOf(`data-details="${a.id}:${key}"`);
+  if (!(at('cond') >= 0 && at('team') > at('cond') && at('cons') > at('team'))) {
+    throw new Error('命座要求应排在「基础触发条件」之后的「队友与命座条件」区块里');
+  }
+  if (html.includes('（勾选 = 启用，不勾选 = 停用）')) throw new Error('勾选框后的错误括号说明仍然存在');
+  if (html.includes('「达到命座开启 + 勾选」')) throw new Error('错误的四种组合说明仍然存在');
+  if (!html.includes('视作角色已达到 x 命')) throw new Error('勾选框的新说明缺失');
+  if (!html.includes('按达到3命设置动作启用/停用</label>')) throw new Error('勾选框文字应只保留「按达到x命设置动作启用/停用」');
+  return '已移动并改名；错误括号与四种组合说明已删除';
+});
+
+check('D②c：米提亚词条（雷元素、瓦列里后面）与动作类型简写', () => {
+  const av = g('getAvatar')('米提亚');
+  if (!av) throw new Error('角色表里缺少「米提亚」');
+  if (av.code !== 4 || av.seq !== 21) throw new Error('米提亚应为雷元素（code=4）、瓦列里后面的编号 21，实际 ' + av.code + '/' + av.seq);
+  if (av.id !== '10000136') throw new Error('米提亚的 id 不对：' + av.id);
+  if (av.elementName !== '雷元素') throw new Error('米提亚的元素不对：' + av.elementName);
+  if (g('avatarCodeLabel')(av) !== '421') throw new Error('米提亚的编辑器编号应为 421，实际 ' + g('avatarCodeLabel')(av));
+  const types = g('ACTION_TYPES');
+  const t2 = types.find(t => t.code === 2);
+  const t7 = types.find(t => t.code === 7);
+  const t8 = types.find(t => t.code === 8);
+  if (t2.name !== '先手') throw new Error('类型 2 的全称应改为「先手」：' + t2.name);
+  if (t7.short !== '低收益') throw new Error('类型 7 的简写应为「低收益」：' + t7.short);
+  if (t8.short !== '元素普攻') throw new Error('类型 8 的简写应为「元素普攻」：' + t8.short);
+  return `米提亚 ${g('avatarCodeLabel')(av)} / ${t2.name} / ${t7.short} / ${t8.short}`;
 });
 
 check('D③：命座要求的三元组与 consRequirement、expression 的组成 / 拆分往返', () => {

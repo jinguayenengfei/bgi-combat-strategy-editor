@@ -1242,7 +1242,7 @@ function mergeSummaryHtml(r, plan, src, fname) {
  *   'blank'  —— 空白策略（只有 info，没有任何动作；导出前必须自己加动作）；
  *   其它值   —— 「新建（含兜底动作）」：一次性建好 3 条动作（都在「当前角色」下），
  *               顺序固定为「兜底战斗检查 → 角色红血标记 → 等待」：
- *               ① 兜底战斗检查：类型 0，指令 check,scroll(10)，条件 t>10 && last-check>4 && (!(last-check=t) || count<1)；
+ *               ① 兜底战斗检查：类型 0，指令 check，条件 t>10 && last-check>4 && (!(last-check>t-9) || count<1)；
  *               ② 角色红血标记：类型 0，不写指令（只做判定 / 标记），条件 low-hp && since>4；
  *               ③ 等待：类型 9，指令 wait(0.2)，主条件恒假 + 一条 priority=100000 的恒真其他触发条件（兜底空转）。
  *               两条类型 0 的动作都依赖「当前角色 + 类型 0 允许只写条件不写指令」这条规则。
@@ -1252,8 +1252,8 @@ function newStrategy(preset) {
   state.strategy = s;
   if (preset !== 'blank') {
     // ① 兜底战斗检查
-    const check = addAction('', 0, { name: '兜底战斗检查', action: 'check,scroll(10)' });
-    if (check.ok) check.action.conditionText = 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )';
+    const check = addAction('', 0, { name: '兜底战斗检查', action: 'check' });
+    if (check.ok) check.action.conditionText = 't > 10 && last-check > 4 && (! (last-check > t - 9) || count < 1)';
     // ② 角色红血标记（只做判定 / 标记，不写指令）
     const mark = addAction('', 0, { name: '角色红血标记', action: '' });
     if (mark.ok) mark.action.conditionText = 'low-hp && since > 4';

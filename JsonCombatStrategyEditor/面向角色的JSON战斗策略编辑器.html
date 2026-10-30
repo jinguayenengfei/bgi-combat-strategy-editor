@@ -12,6 +12,9 @@
   --e0:#9aa0a6; --e1:#8fe3ff; --e2:#ff7a52; --e3:#4cc2ff; --e4:#b98cff; --e5:#6fe0b8; --e6:#ffd166; --e7:#9ade4b;
 }
 *{box-sizing:border-box}
+/* hidden 属性必须压过 .row 等作者样式里的 display:flex，否则「时间值 / t-（时间值）」时
+   下面那行目标动作选择器仍然会显示出来（元素属性 hidden 的 UA 样式优先级低于作者样式）。 */
+[hidden]{display:none !important}
 html,body{margin:0;padding:0;height:100%}
 body{background:var(--bg);color:var(--fg);font:13px/1.6 "Microsoft YaHei","PingFang SC",system-ui,sans-serif;}
 button,input,select,textarea{font-family:inherit;font-size:13px;color:var(--fg)}
@@ -1556,6 +1559,20 @@ const AVATARS = [
   ]
  },
  {
+  "code": 4,
+  "name": "米提亚",
+  "seq": 21,
+  "id": "10000136",
+  "element": 4,
+  "elementName": "雷元素",
+  "noElement": false,
+  "alias": [
+   "Mitya",
+   "米神",
+   "天才小子"
+  ]
+ },
+ {
   "code": 5,
   "name": "琴",
   "seq": 1,
@@ -2352,13 +2369,13 @@ const ELEMENTS = [
 const ACTION_TYPES = [
   { code: 0, name: '战斗检查与标记', short: '检查与标记', cn: '仅为独立的战斗结束检测循环和不指定角色的标记动作预留的位置，可在“当前角色”下新增动作时选择' },
   { code: 1, name: '开盾', short: '开盾', cn: '开启护盾的技能当然是最优先的，并且要保证释放成功，护盾提供的是至关重要的抗打断能力和生存能力' },
-  { code: 2, name: '先手或挂元素', short: '先手', cn: '需要在开始爆发前一定时间释放的技能，和持续时间比较长的挂先手元素技能' },
+  { code: 2, name: '先手', short: '先手', cn: '需要在开始爆发前一定时间释放的技能，和持续时间比较长的挂先手元素技能' },
   { code: 3, name: '后台输出', short: '后台', cn: '可以在后台持续造成较多伤害的技能，有这种技能的一般被认为是后台副C' },
   { code: 4, name: '辅助', short: '辅助', cn: '持续时间或次数有限的，具备减抗和增伤等效果的辅助技能，用于增加后续爆发伤害' },
   { code: 5, name: '爆发', short: '爆发', cn: '能在短时间内造成大量伤害的输出技能，可以挂额外优先级条目在关键辅助技能释放后优先执行' },
   { code: 6, name: '前台长轴输出', short: '前台', cn: '需要较长时间才能完全释放大量伤害的动作组，可以利用额外优先级条目在必要前置动作后一定时间内循环执行' },
-  { code: 7, name: '回血或低收益技能', short: '回血', cn: '包括回血技能在内的，伤害较低的技能，请绝对不要忘记挂额外优先级条目在低血量下优先执行回血技能' },
-  { code: 8, name: '纯挂元素普攻', short: '挂普攻', cn: '字面意思，若没有其他动作可以执行，用普攻挂点元素与后台技能发生反应，并提供充能' },
+  { code: 7, name: '回血或低收益技能', short: '低收益', cn: '包括回血技能在内的，伤害较低的技能，请绝对不要忘记挂额外优先级条目在低血量下优先执行回血技能' },
+  { code: 8, name: '纯挂元素普攻', short: '元素普攻', cn: '字面意思，若没有其他动作可以执行，用普攻挂点元素与后台技能发生反应，并提供充能' },
   { code: 9, name: '兜底普攻/等待', short: '兜底', cn: '实在没有其他动作可以执行了，那就只能来点物理攻击了，或者至少得在日志里输出点什么' },
 ];
 
@@ -2469,6 +2486,7 @@ const COND_QUICK_FUNCS = [
   ['max', '取最大值', 'max'],
   ['combo-min-since', '多个动作中是否有至少一个动作的距上次执行时间小于', 'min(since(参数1),since(参数2),…) < 参数a'],
   ['combo-max-count', '多个动作中是否有至少一个动作执行超过指定次数', 'max(count(参数1,参数a,参数b),count(参数2,参数a,参数b),…) > 参数c'],
+  ['combo-max-ecd', '多个角色的 E 剩余冷却时间中是否有至少一个角色的剩余冷却时间超过', 'max(e-cd(参数1),e-cd(参数2),…) > 参数a'],
 ];
 
 // 能触发切人的指令（CombatCommand.Execute 中的判断）
@@ -2962,7 +2980,7 @@ function condExplainFunction(call, opts) {
    * 否则只会原样打印 index 数字，看不出引用的是哪条动作。
    * 找不到对应动作 / 没传 opts 时仍是原来的纯文本写法。
    */
-  const explainArg = (a) => (a && a.type === 'call' && ['since', 'count', 'last-exec'].includes(a.lower)
+  const explainArg = (a) => (a && a.type === 'call' && ['since', 'count', 'last-exec', 'e-cd'].includes(a.lower)
     ? condExplainFunction(a, opts)
     : argText(a));
 
@@ -3378,17 +3396,17 @@ function capacityOfType(type) { return Number(type) === 0 ? MAX_SLOT_TYPE0 : MAX
  * 界面上编辑的是「模式（达到命座开启 / 达到命座关闭）+ 目标命座数 + 按达到x命设置动作启用/停用」：
  *   · consMode   —— 'none' | 'open' | 'close'
  *   · consTarget —— 目标命座数 1~6（'none' 时是 0）
- *   · consEnabled—— 勾了「按达到x命设置动作启用/停用」之后，这条动作在**目标命座之上**是否启用
- *                   （true = 启用、false = 停用，也就是 expression 里那个布尔值）
+ *   · consEnabled—— 勾选框：勾上 = 在编辑器里**视作角色已达到 x 命**，不勾 = 视作未达到 x 命；
+ *                   再结合模式决定 x 命及以上这条动作是启用还是停用（true = 启用、false = 停用）。
  *
  * 三个信息分别落在两个地方，合起来是**一一对应**的，可以逐字还原：
  *   · consRequirement 的**符号** —— 「模式」（正 = 达到命座开启、负 = 达到命座关闭）、
  *     绝对值 —— 目标命座数；
- *   · expression 里那一段布尔字面量（wantConsValue → consExprText）—— 「启用 / 停用」；
- *   · 勾选状态 = （模式是「开启」）=== 那个布尔值（见 consEnabledFromExpr）。
- * 例：「达到命座关闭 + 3 命 + 勾选」= 3 命及以上停用 → consRequirement = -3、expression 片段是 false、
- * 勾选状态 true；「达到命座关闭 + 3 命 + 不勾选」= 3 命及以上仍然启用 → 也是 -3，但 expression 片段是 true、
- * 勾选状态 false。两种写法语义不同却共用同一个数值，靠 expression 里的布尔值区分。
+ *   · expression 里那一段布尔字面量（wantConsValue → consExprText）—— 「启用 / 停用」的结果；
+ *   · 勾选状态 = 视作角色达到目标命座（勾上 = 达到）。
+ * 例：「达到命座关闭 + 3 命 + 勾选」= 视作 3 命 → 3 命及以上停用 → consRequirement = -3、expression 片段是 false；
+ * 「达到命座关闭 + 3 命 + 不勾选」= 视作未达到 3 命 → 3 命以下仍然启用 → 也是 -3，但 expression 片段是 true。
+ * 两种写法语义不同却共用同一个数值，靠 expression 里的布尔值区分。
  */
 const CONS_MODES = ['none', 'open', 'close'];
 const CONS_MAX = 6;
@@ -3400,8 +3418,8 @@ function consHasRequirement(act) {
 /** 命座要求那一段的布尔值（true = 达到目标命座时这条动作被启用）；没有命座要求时返回 null */
 function wantConsValue(act) {
   if (!consHasRequirement(act)) return null;
-  // 「达到命座开启」+ 勾选 → true（x 命及以上执行）；
-  // 「达到命座关闭」+ 勾选 → false（x 命及以上不执行）；不勾选时各自相反。
+  // 勾选 = 视作达到 x 命：「达到命座开启 + 勾选」→ true（启用）；
+  // 「达到命座关闭 + 勾选」→ false（停用）；不勾选时各自相反。
   const on = (act.consMode === 'open') === !!act.consEnabled;
   if (typeof CONSWANT_DEBUG !== 'undefined' && CONSWANT_DEBUG) console.log('[wantConsValue]', act.name, act.consMode, act.consTarget, act.consEnabled, '->', on);
   return on;
@@ -3513,8 +3531,8 @@ function consTargetsFor(actions, character) {
 }
 
 /**
- * 把某角色「要达到几命」设置成 k（0 = 不启用任何高命手法）：
- * 目标命座不高于 k 的动作启用（勾选），高于 k 的停用（取消勾选）。
+ * 把某角色「视作达到几命」设置成 k（0 = 不启用任何高命手法）：
+ * 目标命座不高于 k 的动作勾选（视作达到），高于 k 的取消勾选（视作未达到）。
  */
 function applyConsLevel(actions, character, k) {
   const level = Number(k) || 0;
@@ -6129,6 +6147,7 @@ const state = {
     teamOps: {},            // 队友条件里夹在两个角色中间的运算符：'<actId>:<field>:<序号>' -> 'and' | 'or'
     teamFilterOps: {},      // 队友条件“新增角色前”运算符的选择：'<actId>:<field>' -> 'and' | 'or'
     team: [],               // 模拟队伍（最多 4 人）
+    previewCondMode: 'raw', // 优先级预览「动作触发条件」列：'raw' 原始表达式 / 'explain' 释义
     showIssues: true,
     convOpen: false,        // 校验面板「隐式转换检查（数值 ↔ 布尔）」是否展开
   },
@@ -7156,7 +7175,7 @@ function renderInfoPanel() {
             <button class="mini" data-act="cons-switch">快捷开关高命座手法</button>
             <span class="hint">${(() => {
               const chs = consCharacters(s.actions);
-              return chs.length ? `可切换的角色：${chs.map(c => esc(c || '当前角色')).join('、')}` : '还没有动作设置「达到命座开启 / 达到命座关闭」，在动作卡片的「触发条件」→「命座要求」里设置';
+              return chs.length ? `可切换的角色：${chs.map(c => esc(c || '当前角色')).join('、')}` : '还没有动作设置「达到命座开启 / 达到命座关闭」，在动作卡片的「队友与命座条件」→「命座要求」里设置';
             })()}</span>
           </div>
         </div>
@@ -7186,8 +7205,10 @@ function renderInfoPanel() {
 /* ---------------- 快捷开关高命座手法 ----------------
  * 列表里展示「有动作设置了达到命座开启 / 达到命座关闭」的每一个角色，
  * 以及该角色可切换动作开关的相关命座；同一个角色有多个可切换命座时就分成几条 chip 放在一起。
- * 点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座 ≤ x 的动作启用、> x 的停用
- * （也就是「有高命必有低命，没有低命必没有高命」），点「不启用高命手法」则把该角色全部停用。
+ * 点某个命座就等于「这个角色在编辑器中按 x 命来设置动作开关」：
+ * 目标命座 ≤ x 的动作勾选（视作达到），> x 的取消勾选（视作未达到）；
+ * 再结合每个动作自己的「达到命座开启 / 达到命座关闭」模式决定实际启用 / 停用
+ * （也就是「有高命必有低命，没有低命必没有高命」），点「不启用高命手法」则把该角色全部取消勾选。
  */
 
 /** 某角色当前生效的命座（= 已勾选目标命座里最大的那个；0 表示没有启用任何高命手法） */
@@ -7208,7 +7229,7 @@ function openConsSwitchModal() {
     openModal({
       title: '快捷开关高命座手法',
       body: `<div class="warnbox">目前没有任何动作设置了「达到命座开启 / 达到命座关闭」。</div>
-        <div class="hint" style="margin-top:6px">请在「动作编辑」页的动作卡片里展开「触发条件」区块，在其中的「命座要求」里选择模式与目标命座数、并按需要勾选「按达到x命设置动作启用/停用」。</div>`,
+        <div class="hint" style="margin-top:6px">请在「动作编辑」页的动作卡片里展开「队友与命座条件」区块，在其中的「命座要求」里选择模式与目标命座数、并按需要勾选「按达到x命设置动作启用/停用」。</div>`,
       actions: [{ label: '知道了', primary: true, value: null }],
     });
     return;
@@ -7230,7 +7251,7 @@ function openConsSwitchModal() {
           <button class="chip ${level === 0 ? 'on' : ''}" data-cons-set="${i}" data-cons-level="0">不启用高命手法</button>
           ${[1, 2, 3, 4, 5, 6].map(x => `<button class="chip ${level === x ? 'on' : ''}" data-cons-set="${i}" data-cons-level="${x}">${x} 命</button>`).join('')}
         </div>
-        <div class="hint" style="margin-top:4px">点某个命座就等于「这个角色按 x 命来设置动作开关」：目标命座不高于 x 的动作启用、高于 x 的停用（有高命必有低命，没有低命必没有高命）。</div>
+        <div class="hint" style="margin-top:4px">点某个命座就等于「这个角色在编辑器中按 x 命来设置动作开关」：目标命座不高于 x 的动作勾选（视作达到）、高于 x 的取消勾选；再结合各动作的开启 / 关闭模式决定实际启用 / 停用（有高命必有低命，没有低命必没有高命）。</div>
       </div>`;
     }).join('');
     return `<div class="hint mb">这里只列出有动作设置了「达到命座开启 / 达到命座关闭」的角色。设置完之后，动作卡片里「命座要求」下「按达到x命设置动作启用/停用」的勾选状态会同步变化，导出时写进各动作的 <span class="pill">consRequirement</span> 字段与 expression。</div>
@@ -7465,6 +7486,7 @@ function renderActionCard(act) {
   const cond = (act.conditionText || '').trim();
   const cmd = String(act.action || '').trim();
   const teamExpr = teammateExpr(act, state.strategy.actions);
+  const teamSummary = [teamExpr, consHasRequirement(act) ? `命座：${consDescribe(act)}` : ''].filter(Boolean).join(' ; ') || '（无）';
   const tags = String(act.tags || '');
   const key = (sec) => `${act.id}:${sec}`;
 
@@ -7496,11 +7518,11 @@ function renderActionCard(act) {
         ${renderCardCmdTab(act, pi, typeName, slotCnt)}
       </details>
       <details class="det" data-details="${attr(key('cond'))}" ${detailOpen(key('cond'), true) ? 'open' : ''}>
-        <summary>触发条件 <span class="hint prev">${esc(cond || '（空 = 恒真）')}</span></summary>
+        <summary>基础触发条件 <span class="hint prev">${esc(cond || '（空 = 恒真）')}</span></summary>
         ${renderCardCondTab(act)}
       </details>
       <details class="det" data-details="${attr(key('team'))}" ${detailOpen(key('team'), false) ? 'open' : ''}>
-        <summary>队友条件 <span class="hint prev">${esc(teamExpr || '（无）')}</span></summary>
+        <summary>队友与命座条件 <span class="hint prev">${esc(teamSummary)}</span></summary>
         ${renderCardTeamTab(act)}
       </details>
       <details class="det" data-details="${attr(key('more'))}" ${detailOpen(key('more'), false) ? 'open' : ''}>
@@ -7955,8 +7977,11 @@ function buildCondSnippet(fn, get) {
       const view = { vals: { bMode: get('bMode'), bNum: get('bNum'), bSince: get('bSince'), cMode: get('cMode'), cNum: get('cNum'), cSince: get('cSince') } };
       const b = cfTimeArgText(view, 'b');
       const c = cfTimeArgText(view, 'c');
-      // 目标动作留空时它前面的逗号要保留，否则两个时间会被当成“目标动作 + 起始时间”
-      const args = a ? [a, b, c].join(',') : ((b || c) ? `,${b},${c}` : '');
+      // 只指定了目标动作、两个时间都留空时，直接写 count(目标动作)，不要再拖两个空逗号。
+      // 只要指定了开始或结束时间，就必须保留两个逗号占位（count(动作,,结束) / count(动作,开始,)），
+      // 否则 BetterGI 会把「开始时间」当成目标动作之外的另一个参数位置。
+      const timesGiven = !!(b || c);
+      const args = a ? (timesGiven ? [a, b, c].join(',') : a) : (timesGiven ? `,${b},${c}` : '');
       return condCmpExpr(`count${args ? `(${args})` : ''}`, get('cmp'), get('num'));
     }
     case 'last-check':
@@ -7993,8 +8018,20 @@ function buildCondSnippet(fn, get) {
       const items = [];
       for (let i = 1; i <= n; i++) {
         const a = opt(get('arg' + i));
-        const args = a ? [a, b, c].join(',') : ((b || c) ? `,${b},${c}` : '');
+        // 与单独的 count 相同：只选了目标动作、两个时间都留空时写成 count(动作)；
+        // 只要填了开始或结束时间，两个逗号都要保留。
+        const args = a ? ((b || c) ? [a, b, c].join(',') : a) : ((b || c) ? `,${b},${c}` : '');
         items.push(args ? `count(${args})` : 'count()');
+      }
+      return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
+    }
+    // 组合 3：多个角色的 E 剩余冷却时间中是否有至少一个超过 → max(e-cd(角色1),e-cd(角色2),…) > 数值
+    case 'combo-max-ecd': {
+      const n = clamp(Number(get('n')) || 2, 1, 9);
+      const items = [];
+      for (let i = 1; i <= n; i++) {
+        const a = opt(get('arg' + i));
+        items.push(`e-cd${a ? `(${a})` : ''}`);
       }
       return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
     }
@@ -8058,6 +8095,17 @@ function renderCondFnParams(ref, st) {
       html += cfTimeParts(st, 'c', '结束时间（统一应用）');
       html += `<div class="hint">起始/结束时间会统一写进 max() 里的每一项 count()（写法与 count 的说明相同，都以开战为基准）；目标动作留空表示“本动作”（此时该 count 不写入时间）。</div>`;
       html += '<div class="hint">只要这些动作里<b>有一个</b>“在指定时间区间内执行次数大于”下面的数值，条件就成立；从未执行过的动作次数为 0，不影响判断。</div>';
+      html += cfCmpRow(st, '>');
+      return html;
+    }
+    case 'combo-max-ecd': {
+      const n = clamp(Number(V('n')) || 2, 1, 9);
+      let html = `<div class="row"><label class="f">参数项数 <select data-cfp="n" style="width:70px">${cfCountOptions(n, 1)}</select></label>
+        <span class="hint">max() 里的项数（1~9）；每一项对应一个 e-cd(角色)</span></div>`;
+      for (let i = 1; i <= n; i++) {
+        html += `<div class="row"><label class="f">参数 ${i} 的目标角色 ${cfCharPicker(st, 'arg' + i, V('arg' + i))}</label></div>`;
+      }
+      html += '<div class="hint">只要这些角色里<b>有一个</b>“E 剩余冷却时间大于”下面的数值，条件就成立；目标角色留空表示“本动作的角色”（写成空参数的 <span class="pill">e-cd()</span>）。</div>';
       html += cfCmpRow(st, '>');
       return html;
     }
@@ -8367,7 +8415,7 @@ function renderCardCondTab(act) {
 }
 
 /**
- * 「触发条件」区块下的子项：命座要求（consRequirement）。
+ * 「队友与命座条件」区块下的子项：命座要求（consRequirement）。
  * BetterGI 的动作节点里没有能保存命座要求的地方，本编辑器约定用自定义字段 consRequirement
  * 保存（BetterGI 会静默忽略未知字段），数值含义见 core.js 顶部说明。
  * 这里编辑的是「模式 + 目标命座数 + 按达到x命设置动作启用/停用」三元组。
@@ -8397,14 +8445,14 @@ function renderCardConsSection(act) {
           <select data-kind="cons" data-id="${attr(act.id)}" data-field="target" style="width:110px" ${none ? 'disabled' : ''}>
             ${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${target === n ? 'selected' : ''}>${n} 命</option>`).join('')}
           </select>
-          ${none ? '' : `<label class="f"><input type="checkbox" data-kind="cons" data-id="${attr(act.id)}" data-field="enabled" ${active ? 'checked' : ''}> 按达到${target}命设置动作启用/停用（勾选 = 启用，不勾选 = 停用）</label>`}
+          ${none ? '' : `<label class="f"><input type="checkbox" data-kind="cons" data-id="${attr(act.id)}" data-field="enabled" ${active ? 'checked' : ''}> 按达到${target}命设置动作启用/停用</label>`}
         </div>
         <div class="hint" style="line-height:1.75">
-          · 只有「无命座要求」时，写入动作节点的 expression 组成方式维持原样（<span class="pill">(触发条件) &amp;&amp; (队友条件)</span>）；<br>
-          · 选了「达到命座开启 / 达到命座关闭」之后，组成方式变成 <span class="pill">((触发条件) &amp;&amp; (命座要求)) &amp;&amp; (队友条件)</span>（队友条件为空时省略后一段），
-            其中「命座要求」就是一个纯粹的布尔值 <span class="pill">true</span> / <span class="pill">false</span>，<b>true 表示这条动作在目标命座之上被启用</b>；<br>
-          · 「达到命座开启 + 勾选」= <span class="pill">true</span>（<b>x 命及以上</b>执行这条动作）；「达到命座开启 + 不勾选」= <span class="pill">false</span>（x 命及以上不再执行）；<br>
-          · 「达到命座关闭 + 勾选」= <span class="pill">false</span>（同样表示 x 命及以上不执行）；「达到命座关闭 + 不勾选」= <span class="pill">true</span>（x 命及以上仍然执行）。<br>
+          · 勾选 = 在编辑器中<b>视作角色已达到 x 命</b>，不勾选 = 视作未达到 x 命；再结合「达到命座开启 / 达到命座关闭」决定 x 命及以上这条动作是启用还是停用。<br>
+          · 「达到命座开启」：视作达到 x 命时启用，视作未达到时停用；「达到命座关闭」：视作达到 x 命时停用，视作未达到时启用。<br>
+          · 上面说的“启用 / 停用”会写进 expression 的布尔值（<span class="pill">true</span> = 启用、<span class="pill">false</span> = 停用）；true/false 只是最终结果，不代表勾选状态本身。<br>
+          · 只有「无命座要求」时，写入动作节点的 expression 组成方式维持原样（<span class="pill">(基础触发条件) &amp;&amp; (队友条件)</span>）；
+          选了「达到命座开启 / 达到命座关闭」之后，组成方式变成 <span class="pill">((基础触发条件) &amp;&amp; (命座要求)) &amp;&amp; (队友条件)</span>（队友条件为空时省略后一段）。<br>
           勾选的联动规则是「有高命必有低命，没有低命必没有高命」：勾选 x 命会连带勾上目标命座不高于 x 的其他动作，取消勾选 x 命会连带取消目标命座不低于 x 的其他动作。<br>
           · 写进动作节点的字段是 <span class="pill">consRequirement</span> = <b>${req}</b>：<b>正负号</b>表示「达到命座开启 / 达到命座关闭」（绝对值 = 目标命座数），
           「启用 / 停用」由 expression 里那个布尔值表达（${esc(consDescribe(act))}）。<br>
@@ -8425,11 +8473,10 @@ function renderCardCondTabInner(act) {
     ${renderCondEditor('cond', act.id, '', {
       text: act.conditionText,
       title: '基础动作触发条件 → 写入 condition.expression',
-      intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友条件已单独分离到「队友条件」区块，会自动与本区块内容取与）。',
+      intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友与命座条件已单独分离到「队友与命座条件」区块，会自动与本区块内容取与）。',
     })}
-    ${renderCardConsSection(act)}
     <hr>
-    <div class="hint" style="margin-bottom:4px">与队友条件合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
+    <div class="hint" style="margin-bottom:4px">与队友条件、命座要求合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap" id="condFinal-${attr(act.id)}">${esc(finalExpr || '（空 = 恒真）')}</div>
     <div class="hint" style="margin-top:4px">队友条件片段：${wrap.length ? wrap.map(esc).join(' ; ') : '（无）'}</div>`;
 }
@@ -8480,7 +8527,7 @@ function renderCardTeamTab(act) {
         <option value="or" ${opOf(field) === 'or' ? 'selected' : ''}>或 ||</option>
       </select></label>`;
   return `
-    <div class="hint" style="margin:8px 0 6px">这里选择的条件会应用到该动作节点<b>所有</b> expression（主条件与全部其他触发条件），与触发条件取与后生效。角色之间的运算符可以逐个修改，因此可以写“甲与乙或丙”这类组合；同一个角色也允许重复出现（多个角色组合里出现同一角色很正常）。</div>
+    <div class="hint" style="margin:8px 0 6px">这里选择的条件会应用到该动作节点<b>所有</b> expression（主条件与全部其他触发条件），与基础触发条件取与后生效。角色之间的运算符可以逐个修改，因此可以写“甲与乙或丙”这类组合；同一个角色也允许重复出现（多个角色组合里出现同一角色很正常）。</div>
 
     <div class="grid2">
       <label class="f">必要队友</label>
@@ -8532,6 +8579,7 @@ function renderCardTeamTab(act) {
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap">${esc(teammateExpr(act, state.strategy.actions) || '（无）')}</div>
     <div class="hint" style="margin-top:4px">排除队友：<span class="mono">${esc((tm.exclude || []).length ? excludeGroupTextOf(tm) : '（无，表达式里会写成 (true) 占位）')}</span></div>
     <div class="hint" style="margin-top:4px">自动排除生成：<span class="mono">${esc(autoExcludeExpr(act, state.strategy.actions) || '（无）')}</span></div>
+    ${renderCardConsSection(act)}
     <hr>
     <div class="hint">最终写入的 condition.expression：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap;margin-top:4px">${esc(buildExpression(act, state.strategy.actions) || '（空 = 恒真）')}</div>`;
@@ -9700,15 +9748,23 @@ function renderPreviewPanel() {
   const teamFull = team.length === 4;
   const list = expandPriorities(state.strategy.actions, teamFull ? team : null);
   const dropped = state.strategy.actions.filter(a => a.character && teamFull && !team.includes(a.character));
+  const condMode = state.ui.previewCondMode === 'explain' ? 'explain' : 'raw';
 
   const priClass = (p) => (p < 10000 ? 'hi' : p < 50000 ? 'mid' : 'low');
 
-  // 「动作触发条件」列显示原始 expression 文本；只给「入参为动作的条件函数」（since / count / last-exec）
-  // 的动作参数套一层悬停提示（提示该动作的 index 与动作名），显示出来的正文仍是原文。
+  // 「动作触发条件」列：
+  //   raw     —— 原始 expression 文本（只给 since / count / last-exec 的动作参数套悬停提示，正文仍是原文）；
+  //   explain —— 与动作卡片「基础触发条件」下的「释义」同一套渲染：动作引用显示成动作名称并带 index / 指令的悬停提示。
+  // 两种模式都解释表里那一行的完整 expression（含队友条件、命座要求），保证与列里显示的内容一一对应。
   const condHtml = (e) => {
     const text = e.expression || '';
     if (!text) return esc('（空 = 恒真）');
-    return condRawExprHtml(text, condExplainCtx(e.action ? e.action.id : ''));
+    const ctx = condExplainCtx(e.action ? e.action.id : '');
+    if (condMode !== 'explain') return condRawExprHtml(text, ctx);
+    const parsed = condParse(text, allActionNames(state.strategy.actions));
+    if (parsed.error) return `<span style="color:var(--err)">${esc(parsed.error)}</span>`;
+    if (!parsed.ast) return esc('（空 = 恒真）');
+    return condExplain(parsed.ast, ctx);
   };
 
   const rows = list.map((e, i) => `<tr>
@@ -9739,6 +9795,12 @@ function renderPreviewPanel() {
 
     <div class="card">
       <h3>优先级排序预览 <span class="hint">共 ${list.length} 个条目（每个动作 = 1 个主条目 + N 个其他触发条件条目）</span></h3>
+      <div class="row mb">
+        <span class="hint">「动作触发条件」列显示：</span>
+        <button type="button" class="chip ${condMode === 'raw' ? 'on' : ''}" data-act="preview-cond-mode" data-mode="raw">原始表达式</button>
+        <button type="button" class="chip ${condMode === 'explain' ? 'on' : ''}" data-act="preview-cond-mode" data-mode="explain">释义</button>
+        <span class="hint">释义与「动作编辑」里「基础触发条件」下的释义相同；鼠标移到动作名上可查看 index 与动作指令。</span>
+      </div>
       <div class="row mb">
         <span class="hint">按 priority 从小到大排序；同 priority 时按动作在策略中的声明顺序（主条目在前、额外条件按顺序）。</span>
       </div>
@@ -9914,6 +9976,13 @@ function loadTeamDialog() {
 /* ---------------- 事件 ---------------- */
 
 const previewHandlers = {
+  'preview-cond-mode': (t) => {
+    const mode = t.getAttribute('data-mode') === 'explain' ? 'explain' : 'raw';
+    if (state.ui.previewCondMode === mode) return;
+    state.ui.previewCondMode = mode;
+    saveUi();
+    refresh(['preview']);
+  },
   'team-edit': () => {
     pickAvatarsLive({
       title: '模拟队伍（选 4 名角色）',
@@ -11184,7 +11253,7 @@ function mergeSummaryHtml(r, plan, src, fname) {
  *   'blank'  —— 空白策略（只有 info，没有任何动作；导出前必须自己加动作）；
  *   其它值   —— 「新建（含兜底动作）」：一次性建好 3 条动作（都在「当前角色」下），
  *               顺序固定为「兜底战斗检查 → 角色红血标记 → 等待」：
- *               ① 兜底战斗检查：类型 0，指令 check,scroll(10)，条件 t>10 && last-check>4 && (!(last-check=t) || count<1)；
+ *               ① 兜底战斗检查：类型 0，指令 check，条件 t>10 && last-check>4 && (!(last-check>t-9) || count<1)；
  *               ② 角色红血标记：类型 0，不写指令（只做判定 / 标记），条件 low-hp && since>4；
  *               ③ 等待：类型 9，指令 wait(0.2)，主条件恒假 + 一条 priority=100000 的恒真其他触发条件（兜底空转）。
  *               两条类型 0 的动作都依赖「当前角色 + 类型 0 允许只写条件不写指令」这条规则。
@@ -11194,8 +11263,8 @@ function newStrategy(preset) {
   state.strategy = s;
   if (preset !== 'blank') {
     // ① 兜底战斗检查
-    const check = addAction('', 0, { name: '兜底战斗检查', action: 'check,scroll(10)' });
-    if (check.ok) check.action.conditionText = 't > 10 && last-check > 4 && (! (last-check = t) || count < 1 )';
+    const check = addAction('', 0, { name: '兜底战斗检查', action: 'check' });
+    if (check.ok) check.action.conditionText = 't > 10 && last-check > 4 && (! (last-check > t - 9) || count < 1)';
     // ② 角色红血标记（只做判定 / 标记，不写指令）
     const mark = addAction('', 0, { name: '角色红血标记', action: '' });
     if (mark.ok) mark.action.conditionText = 'low-hp && since > 4';

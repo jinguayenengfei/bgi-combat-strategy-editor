@@ -117,6 +117,7 @@ function renderActionCard(act) {
   const cond = (act.conditionText || '').trim();
   const cmd = String(act.action || '').trim();
   const teamExpr = teammateExpr(act, state.strategy.actions);
+  const teamSummary = [teamExpr, consHasRequirement(act) ? `命座：${consDescribe(act)}` : ''].filter(Boolean).join(' ; ') || '（无）';
   const tags = String(act.tags || '');
   const key = (sec) => `${act.id}:${sec}`;
 
@@ -148,11 +149,11 @@ function renderActionCard(act) {
         ${renderCardCmdTab(act, pi, typeName, slotCnt)}
       </details>
       <details class="det" data-details="${attr(key('cond'))}" ${detailOpen(key('cond'), true) ? 'open' : ''}>
-        <summary>触发条件 <span class="hint prev">${esc(cond || '（空 = 恒真）')}</span></summary>
+        <summary>基础触发条件 <span class="hint prev">${esc(cond || '（空 = 恒真）')}</span></summary>
         ${renderCardCondTab(act)}
       </details>
       <details class="det" data-details="${attr(key('team'))}" ${detailOpen(key('team'), false) ? 'open' : ''}>
-        <summary>队友条件 <span class="hint prev">${esc(teamExpr || '（无）')}</span></summary>
+        <summary>队友与命座条件 <span class="hint prev">${esc(teamSummary)}</span></summary>
         ${renderCardTeamTab(act)}
       </details>
       <details class="det" data-details="${attr(key('more'))}" ${detailOpen(key('more'), false) ? 'open' : ''}>
@@ -607,8 +608,11 @@ function buildCondSnippet(fn, get) {
       const view = { vals: { bMode: get('bMode'), bNum: get('bNum'), bSince: get('bSince'), cMode: get('cMode'), cNum: get('cNum'), cSince: get('cSince') } };
       const b = cfTimeArgText(view, 'b');
       const c = cfTimeArgText(view, 'c');
-      // 目标动作留空时它前面的逗号要保留，否则两个时间会被当成“目标动作 + 起始时间”
-      const args = a ? [a, b, c].join(',') : ((b || c) ? `,${b},${c}` : '');
+      // 只指定了目标动作、两个时间都留空时，直接写 count(目标动作)，不要再拖两个空逗号。
+      // 只要指定了开始或结束时间，就必须保留两个逗号占位（count(动作,,结束) / count(动作,开始,)），
+      // 否则 BetterGI 会把「开始时间」当成目标动作之外的另一个参数位置。
+      const timesGiven = !!(b || c);
+      const args = a ? (timesGiven ? [a, b, c].join(',') : a) : (timesGiven ? `,${b},${c}` : '');
       return condCmpExpr(`count${args ? `(${args})` : ''}`, get('cmp'), get('num'));
     }
     case 'last-check':
@@ -645,8 +649,20 @@ function buildCondSnippet(fn, get) {
       const items = [];
       for (let i = 1; i <= n; i++) {
         const a = opt(get('arg' + i));
-        const args = a ? [a, b, c].join(',') : ((b || c) ? `,${b},${c}` : '');
+        // 与单独的 count 相同：只选了目标动作、两个时间都留空时写成 count(动作)；
+        // 只要填了开始或结束时间，两个逗号都要保留。
+        const args = a ? ((b || c) ? [a, b, c].join(',') : a) : ((b || c) ? `,${b},${c}` : '');
         items.push(args ? `count(${args})` : 'count()');
+      }
+      return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
+    }
+    // 组合 3：多个角色的 E 剩余冷却时间中是否有至少一个超过 → max(e-cd(角色1),e-cd(角色2),…) > 数值
+    case 'combo-max-ecd': {
+      const n = clamp(Number(get('n')) || 2, 1, 9);
+      const items = [];
+      for (let i = 1; i <= n; i++) {
+        const a = opt(get('arg' + i));
+        items.push(`e-cd${a ? `(${a})` : ''}`);
       }
       return condCmpExpr(`max(${items.join(',')})`, get('cmp') === undefined ? '>' : get('cmp'), get('num'));
     }
@@ -710,6 +726,17 @@ function renderCondFnParams(ref, st) {
       html += cfTimeParts(st, 'c', '结束时间（统一应用）');
       html += `<div class="hint">起始/结束时间会统一写进 max() 里的每一项 count()（写法与 count 的说明相同，都以开战为基准）；目标动作留空表示“本动作”（此时该 count 不写入时间）。</div>`;
       html += '<div class="hint">只要这些动作里<b>有一个</b>“在指定时间区间内执行次数大于”下面的数值，条件就成立；从未执行过的动作次数为 0，不影响判断。</div>';
+      html += cfCmpRow(st, '>');
+      return html;
+    }
+    case 'combo-max-ecd': {
+      const n = clamp(Number(V('n')) || 2, 1, 9);
+      let html = `<div class="row"><label class="f">参数项数 <select data-cfp="n" style="width:70px">${cfCountOptions(n, 1)}</select></label>
+        <span class="hint">max() 里的项数（1~9）；每一项对应一个 e-cd(角色)</span></div>`;
+      for (let i = 1; i <= n; i++) {
+        html += `<div class="row"><label class="f">参数 ${i} 的目标角色 ${cfCharPicker(st, 'arg' + i, V('arg' + i))}</label></div>`;
+      }
+      html += '<div class="hint">只要这些角色里<b>有一个</b>“E 剩余冷却时间大于”下面的数值，条件就成立；目标角色留空表示“本动作的角色”（写成空参数的 <span class="pill">e-cd()</span>）。</div>';
       html += cfCmpRow(st, '>');
       return html;
     }
@@ -1019,7 +1046,7 @@ function renderCardCondTab(act) {
 }
 
 /**
- * 「触发条件」区块下的子项：命座要求（consRequirement）。
+ * 「队友与命座条件」区块下的子项：命座要求（consRequirement）。
  * BetterGI 的动作节点里没有能保存命座要求的地方，本编辑器约定用自定义字段 consRequirement
  * 保存（BetterGI 会静默忽略未知字段），数值含义见 core.js 顶部说明。
  * 这里编辑的是「模式 + 目标命座数 + 按达到x命设置动作启用/停用」三元组。
@@ -1049,14 +1076,14 @@ function renderCardConsSection(act) {
           <select data-kind="cons" data-id="${attr(act.id)}" data-field="target" style="width:110px" ${none ? 'disabled' : ''}>
             ${[1, 2, 3, 4, 5, 6].map(n => `<option value="${n}" ${target === n ? 'selected' : ''}>${n} 命</option>`).join('')}
           </select>
-          ${none ? '' : `<label class="f"><input type="checkbox" data-kind="cons" data-id="${attr(act.id)}" data-field="enabled" ${active ? 'checked' : ''}> 按达到${target}命设置动作启用/停用（勾选 = 启用，不勾选 = 停用）</label>`}
+          ${none ? '' : `<label class="f"><input type="checkbox" data-kind="cons" data-id="${attr(act.id)}" data-field="enabled" ${active ? 'checked' : ''}> 按达到${target}命设置动作启用/停用</label>`}
         </div>
         <div class="hint" style="line-height:1.75">
-          · 只有「无命座要求」时，写入动作节点的 expression 组成方式维持原样（<span class="pill">(触发条件) &amp;&amp; (队友条件)</span>）；<br>
-          · 选了「达到命座开启 / 达到命座关闭」之后，组成方式变成 <span class="pill">((触发条件) &amp;&amp; (命座要求)) &amp;&amp; (队友条件)</span>（队友条件为空时省略后一段），
-            其中「命座要求」就是一个纯粹的布尔值 <span class="pill">true</span> / <span class="pill">false</span>，<b>true 表示这条动作在目标命座之上被启用</b>；<br>
-          · 「达到命座开启 + 勾选」= <span class="pill">true</span>（<b>x 命及以上</b>执行这条动作）；「达到命座开启 + 不勾选」= <span class="pill">false</span>（x 命及以上不再执行）；<br>
-          · 「达到命座关闭 + 勾选」= <span class="pill">false</span>（同样表示 x 命及以上不执行）；「达到命座关闭 + 不勾选」= <span class="pill">true</span>（x 命及以上仍然执行）。<br>
+          · 勾选 = 在编辑器中<b>视作角色已达到 x 命</b>，不勾选 = 视作未达到 x 命；再结合「达到命座开启 / 达到命座关闭」决定 x 命及以上这条动作是启用还是停用。<br>
+          · 「达到命座开启」：视作达到 x 命时启用，视作未达到时停用；「达到命座关闭」：视作达到 x 命时停用，视作未达到时启用。<br>
+          · 上面说的“启用 / 停用”会写进 expression 的布尔值（<span class="pill">true</span> = 启用、<span class="pill">false</span> = 停用）；true/false 只是最终结果，不代表勾选状态本身。<br>
+          · 只有「无命座要求」时，写入动作节点的 expression 组成方式维持原样（<span class="pill">(基础触发条件) &amp;&amp; (队友条件)</span>）；
+          选了「达到命座开启 / 达到命座关闭」之后，组成方式变成 <span class="pill">((基础触发条件) &amp;&amp; (命座要求)) &amp;&amp; (队友条件)</span>（队友条件为空时省略后一段）。<br>
           勾选的联动规则是「有高命必有低命，没有低命必没有高命」：勾选 x 命会连带勾上目标命座不高于 x 的其他动作，取消勾选 x 命会连带取消目标命座不低于 x 的其他动作。<br>
           · 写进动作节点的字段是 <span class="pill">consRequirement</span> = <b>${req}</b>：<b>正负号</b>表示「达到命座开启 / 达到命座关闭」（绝对值 = 目标命座数），
           「启用 / 停用」由 expression 里那个布尔值表达（${esc(consDescribe(act))}）。<br>
@@ -1077,11 +1104,10 @@ function renderCardCondTabInner(act) {
     ${renderCondEditor('cond', act.id, '', {
       text: act.conditionText,
       title: '基础动作触发条件 → 写入 condition.expression',
-      intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友条件已单独分离到「队友条件」区块，会自动与本区块内容取与）。',
+      intro: '除 <span class="pill">in-party</span> 以外的条件判断都写在这里（队友与命座条件已单独分离到「队友与命座条件」区块，会自动与本区块内容取与）。',
     })}
-    ${renderCardConsSection(act)}
     <hr>
-    <div class="hint" style="margin-bottom:4px">与队友条件合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
+    <div class="hint" style="margin-bottom:4px">与队友条件、命座要求合并后，最终写入动作节点的 expression（每个片段都会单独加括号，保证运算顺序）：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap" id="condFinal-${attr(act.id)}">${esc(finalExpr || '（空 = 恒真）')}</div>
     <div class="hint" style="margin-top:4px">队友条件片段：${wrap.length ? wrap.map(esc).join(' ; ') : '（无）'}</div>`;
 }
@@ -1132,7 +1158,7 @@ function renderCardTeamTab(act) {
         <option value="or" ${opOf(field) === 'or' ? 'selected' : ''}>或 ||</option>
       </select></label>`;
   return `
-    <div class="hint" style="margin:8px 0 6px">这里选择的条件会应用到该动作节点<b>所有</b> expression（主条件与全部其他触发条件），与触发条件取与后生效。角色之间的运算符可以逐个修改，因此可以写“甲与乙或丙”这类组合；同一个角色也允许重复出现（多个角色组合里出现同一角色很正常）。</div>
+    <div class="hint" style="margin:8px 0 6px">这里选择的条件会应用到该动作节点<b>所有</b> expression（主条件与全部其他触发条件），与基础触发条件取与后生效。角色之间的运算符可以逐个修改，因此可以写“甲与乙或丙”这类组合；同一个角色也允许重复出现（多个角色组合里出现同一角色很正常）。</div>
 
     <div class="grid2">
       <label class="f">必要队友</label>
@@ -1184,6 +1210,7 @@ function renderCardTeamTab(act) {
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap">${esc(teammateExpr(act, state.strategy.actions) || '（无）')}</div>
     <div class="hint" style="margin-top:4px">排除队友：<span class="mono">${esc((tm.exclude || []).length ? excludeGroupTextOf(tm) : '（无，表达式里会写成 (true) 占位）')}</span></div>
     <div class="hint" style="margin-top:4px">自动排除生成：<span class="mono">${esc(autoExcludeExpr(act, state.strategy.actions) || '（无）')}</span></div>
+    ${renderCardConsSection(act)}
     <hr>
     <div class="hint">最终写入的 condition.expression：</div>
     <div class="mono pill" style="display:block;padding:6px 8px;white-space:pre-wrap;margin-top:4px">${esc(buildExpression(act, state.strategy.actions) || '（空 = 恒真）')}</div>`;
